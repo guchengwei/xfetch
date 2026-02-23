@@ -37,7 +37,7 @@ def camofox_open_tab(url: str, session_key: str, port: int = 9377) -> Optional[s
 
     Returns the tab ID string, or None on failure.
     """
-    payload = json.dumps({"url": url, "sessionKey": session_key}).encode()
+    payload = json.dumps({"url": url, "sessionKey": session_key, "userId": CAMOFOX_USER}).encode()
     req = urllib.request.Request(
         f"http://localhost:{port}/tabs",
         data=payload,
@@ -62,7 +62,7 @@ def camofox_snapshot(tab_id: str, port: int = 9377) -> Optional[str]:
     Returns the accessibility snapshot string, or None on failure.
     """
     req = urllib.request.Request(
-        f"http://localhost:{port}/tabs/{tab_id}/snapshot",
+        f"http://localhost:{port}/tabs/{tab_id}/snapshot?userId={CAMOFOX_USER}",
         headers={"User-Agent": CAMOFOX_USER},
     )
     try:
@@ -76,7 +76,7 @@ def camofox_snapshot(tab_id: str, port: int = 9377) -> Optional[str]:
 def camofox_close_tab(tab_id: str, port: int = 9377) -> None:
     """DELETE /tabs/{tab_id} to close the tab. Best-effort; errors are swallowed."""
     req = urllib.request.Request(
-        f"http://localhost:{port}/tabs/{tab_id}",
+        f"http://localhost:{port}/tabs/{tab_id}?userId={CAMOFOX_USER}",
         method="DELETE",
         headers={"User-Agent": CAMOFOX_USER},
     )

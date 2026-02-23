@@ -75,7 +75,7 @@ def save_to_markdown(item: UnifiedContent, filepath: str = None):
         f.write(f"- Source: {item.source_name} ({item.source_type.value})\n")
         f.write(f"- URL: {item.url}\n")
         f.write(f"- Fetched: {item.fetched_at[:16]}\n\n")
-        f.write(f"{item.content[:2000]}\n")
+        f.write(f"{item.content[:10000]}\n")
         f.write("\n---\n")
 
     logger.info(f"Saved to Markdown: {path}")

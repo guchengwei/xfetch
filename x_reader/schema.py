@@ -175,6 +175,14 @@ def from_twitter(data: dict) -> UnifiedContent:
         content_parts.append(f"[Video transcript]\n{transcript}")
     if ocr_text:
         content_parts.append(f"[Image text]\n{ocr_text}")
+    replies = data.get("replies") or []
+    if replies:
+        reply_lines = [
+            f"@{r.get('author','')}: {r.get('text','')}"
+            for r in replies if r.get('text')
+        ]
+        if reply_lines:
+            content_parts.append("[Comments]\n" + "\n\n".join(reply_lines))
     content = "\n\n".join(p for p in content_parts if p)
 
     # Prefer quote's media when outer tweet has none (quote-tweet-with-video pattern)

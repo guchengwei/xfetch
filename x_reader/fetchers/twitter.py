@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import requests
 from loguru import logger
 from typing import Dict, Any, List, Optional, Tuple
@@ -342,6 +343,60 @@ def _fetch_replies_via_camofox(
     return replies
 
 
+def _ensure_camofox_running(port: int = 9377) -> bool:
+    """Start Camofox if not running. Returns True when available."""
+    if camofox_available(port):
+        return True
+    camofox_dir = os.getenv("CAMOFOX_DIR", "")
+    if not camofox_dir or not os.path.isdir(camofox_dir):
+        return False
+    logger.info(f"[Twitter] Starting Camofox from {camofox_dir}")
+    subprocess.Popen(
+        ["npm", "start"],
+        cwd=camofox_dir,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(15):
+        time.sleep(1)
+        if camofox_available(port):
+            logger.info("[Twitter] Camofox ready")
+            return True
+    logger.warning("[Twitter] Camofox did not start in time")
+    return False
+
+
+def _fetch_replies_direct(url: str, nitter_instance: str = "nitter.net", limit: int = 50) -> list:
+    """Fetch replies directly from Nitter HTML (no Camofox required)."""
+    username, tweet_id = _parse_tweet_url(url)
+    if not tweet_id:
+        return []
+    nitter_url = f"https://{nitter_instance}/{username}/status/{tweet_id}"
+    try:
+        resp = requests.get(nitter_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            return []
+        html = resp.text
+    except Exception as e:
+        logger.warning(f"[Twitter] Direct Nitter fetch failed ({e})")
+        return []
+    replies = []
+    parts = re.split(r'(?=<div[^>]*class="[^"]*\btimeline-item\b[^"]*\breply\b)', html)
+    for part in parts[1:]:
+        if len(replies) >= limit:
+            break
+        user_m = re.search(r'class="username"[^>]*>@?(\w+)<', part)
+        cont_m = re.search(r'class="tweet-content\b[^"]*"[^>]*>(.*?)</div>', part, re.DOTALL)
+        if not cont_m:
+            continue
+        text = re.sub(r'<[^>]+>', '', cont_m.group(1)).strip()
+        text = re.sub(r'\s+', ' ', text)
+        if text:
+            replies.append({"author": user_m.group(1) if user_m else "", "text": text, "likes": 0})
+    logger.info(f"[Twitter] Direct Nitter: {len(replies)} replies")
+    return replies
+
+
 # ---------------------------------------------------------------------------
 # Media enrichment (transcription + OCR)
 # ---------------------------------------------------------------------------
@@ -471,13 +526,17 @@ async def fetch_twitter(url: str) -> Dict[str, Any]:
             if has_content:
                 # Enrich with video transcription and photo OCR
                 _enrich_with_media(result)
-                # Augment with replies from Camofox if available
+                # Augment with replies — try auto-starting Camofox, fall back to direct Nitter
                 port = int(os.getenv("CAMOFOX_PORT", "9377"))
                 nitter = os.getenv("NITTER_INSTANCE", "nitter.net")
+                _ensure_camofox_running(port)
                 if camofox_available(port):
                     replies = _fetch_replies_via_camofox(url, port=port, nitter_instance=nitter)
-                    if replies:
-                        result["replies"] = replies
+                else:
+                    replies = _fetch_replies_direct(url, nitter_instance=nitter)
+                replies = replies[:50]
+                if replies:
+                    result["replies"] = replies
                 result["platform"] = "twitter"
                 return result
             logger.warning("[Twitter] FxTwitter returned no content")
