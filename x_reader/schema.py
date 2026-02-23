@@ -166,13 +166,22 @@ def from_twitter(data: dict) -> UnifiedContent:
     # X Articles: use article title + body; regular tweets: use tweet text
     title = article.get("title") or data.get("text", "")[:100]
 
-    # Build content: tweet text + transcript + OCR
+    # Build content: tweet text + transcript + OCR (check outer tweet and quote)
+    quote = data.get("quote") or {}
     content_parts = [article.get("full_text") or data.get("text", "")]
-    if data.get("transcript"):
-        content_parts.append(f"[Video transcript]\n{data['transcript']}")
-    if data.get("ocr_text"):
-        content_parts.append(f"[Image text]\n{data['ocr_text']}")
+    transcript = data.get("transcript") or quote.get("transcript", "")
+    ocr_text = data.get("ocr_text") or quote.get("ocr_text", "")
+    if transcript:
+        content_parts.append(f"[Video transcript]\n{transcript}")
+    if ocr_text:
+        content_parts.append(f"[Image text]\n{ocr_text}")
     content = "\n\n".join(p for p in content_parts if p)
+
+    # Prefer quote's media when outer tweet has none (quote-tweet-with-video pattern)
+    quote_media = quote.get("media") or {}
+    if not media_type_val and quote_media.get("type"):
+        media_type_val = quote_media["type"]
+        media = quote_media
 
     extra = {
         "likes":         data.get("likes", 0),
@@ -186,10 +195,10 @@ def from_twitter(data: dict) -> UnifiedContent:
         "thumbnail_url": media.get("thumbnail_url", ""),
         "video_duration": media.get("duration", 0),
         "photo_urls":    media.get("photo_urls", []),
-        "has_transcript": bool(data.get("transcript")),
+        "has_transcript": bool(transcript),
     }
-    if data.get("quote"):
-        extra["quote"] = data["quote"]
+    if quote:
+        extra["quote"] = quote
     if data.get("replies"):
         extra["replies"] = data["replies"]
     if article:

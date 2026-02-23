@@ -25,6 +25,10 @@ class UniversalReader:
     """
 
     def __init__(self, inbox: Optional[UnifiedInbox] = None):
+        if inbox is None:
+            import os
+            inbox_path = os.getenv("INBOX_FILE", "unified_inbox.json")
+            inbox = UnifiedInbox(filepath=inbox_path)
         self.inbox = inbox
 
     def _detect_platform(self, url: str) -> str:

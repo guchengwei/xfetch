@@ -18,20 +18,20 @@ Claude Code config (~/.claude/claude_desktop_config.json):
 """
 
 import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / '.env')
 
 from x_reader.reader import UniversalReader
-from x_reader.schema import UnifiedInbox
 
 mcp = FastMCP(
     "x-reader",
     instructions="Universal content reader — give it any URL, get structured content back.",
 )
 
-reader = UniversalReader(inbox=UnifiedInbox())
+reader = UniversalReader()
 
 
 @mcp.tool()
