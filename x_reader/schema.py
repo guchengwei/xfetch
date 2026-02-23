@@ -159,16 +159,53 @@ def from_bilibili(video: dict) -> UnifiedContent:
 
 
 def from_twitter(data: dict) -> UnifiedContent:
+    article = data.get("article") or {}
+    media = data.get("media") or {}
+    media_type_val = media.get("type", "")
+
+    # X Articles: use article title + body; regular tweets: use tweet text
+    title = article.get("title") or data.get("text", "")[:100]
+
+    # Build content: tweet text + transcript + OCR
+    content_parts = [article.get("full_text") or data.get("text", "")]
+    if data.get("transcript"):
+        content_parts.append(f"[Video transcript]\n{data['transcript']}")
+    if data.get("ocr_text"):
+        content_parts.append(f"[Image text]\n{data['ocr_text']}")
+    content = "\n\n".join(p for p in content_parts if p)
+
+    extra = {
+        "likes":         data.get("likes", 0),
+        "retweets":      data.get("retweets", 0),
+        "views":         data.get("views", 0),
+        "bookmarks":     data.get("bookmarks", 0),
+        "replies_count": data.get("replies_count", 0),
+        "lang":          data.get("lang", ""),
+        "created_at":    data.get("created_at", ""),
+        "video_url":     media.get("video_url", ""),
+        "thumbnail_url": media.get("thumbnail_url", ""),
+        "video_duration": media.get("duration", 0),
+        "photo_urls":    media.get("photo_urls", []),
+        "has_transcript": bool(data.get("transcript")),
+    }
+    if data.get("quote"):
+        extra["quote"] = data["quote"]
+    if data.get("replies"):
+        extra["replies"] = data["replies"]
+    if article:
+        extra["article_title"] = article.get("title", "")
+        extra["article_word_count"] = article.get("word_count", 0)
+
     return UnifiedContent(
         source_type=SourceType.TWITTER,
-        source_name=data.get('author', ''),
-        title=data.get('text', '')[:100],
-        content=data.get('text', ''),
-        url=data.get('url', ''),
-        extra={
-            "likes": data.get('likes', 0),
-            "retweets": data.get('retweets', 0),
-        },
+        source_name=data.get("screen_name") or data.get("author", ""),
+        title=title,
+        content=content,
+        url=data.get("url", ""),
+        media_type=MediaType.VIDEO if media_type_val == "video" else
+                   MediaType.IMAGE if media_type_val == "photo" else MediaType.TEXT,
+        media_url=media.get("video_url") or (media.get("photo_urls") or [None])[0],
+        extra=extra,
     )
 
 

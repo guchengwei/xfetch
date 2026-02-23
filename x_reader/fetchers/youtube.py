@@ -20,24 +20,6 @@ from typing import Dict, Any
 from x_reader.fetchers.jina import fetch_via_jina
 
 
-def _transcribe_local(audio_path: str) -> str:
-    """Transcribe audio using mlx-whisper on Apple Silicon. Returns transcript or empty string."""
-    try:
-        import mlx_whisper
-        model = os.getenv("MLX_WHISPER_MODEL", "mlx-community/whisper-large-v3-mlx")
-        logger.info(f"[youtube] transcribing locally with {model}")
-        result = mlx_whisper.transcribe(audio_path, path_or_hf_repo=model)
-        if not isinstance(result, dict):
-            logger.warning(f"[youtube] mlx_whisper returned unexpected type: {type(result)}")
-            return ""
-        text = result.get("text", "").strip()
-        logger.info(f"[youtube] local transcription done, {len(text)} chars")
-        return text
-    except Exception as e:
-        logger.warning(f"[youtube] local transcription failed: {e}")
-        return ""
-
-
 def _extract_video_id(url: str) -> str:
     """Extract video ID from YouTube URL."""
     match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
@@ -150,41 +132,8 @@ def _transcribe_via_whisper(url: str) -> str:
             logger.warning(f"Audio file too large ({file_size // 1024 // 1024}MB > 25MB limit)")
             return ""
 
-        use_local = os.getenv("USE_LOCAL_WHISPER", "false").lower() == "true"
-        if use_local:
-            transcript = _transcribe_local(audio_path)
-            if transcript:
-                return transcript
-            logger.info("[youtube] local transcription empty, falling back to Groq")
-
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            logger.warning("GROQ_API_KEY not set and local transcription returned empty — no transcript available")
-            return ""
-
-        logger.info(f"Transcribing {file_size // 1024}KB audio via Groq Whisper...")
-
-        import requests
-        try:
-            with open(audio_path, "rb") as f:
-                response = requests.post(
-                    "https://api.groq.com/openai/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    files={"file": (os.path.basename(audio_path), f, "audio/mp4")},
-                    data={"model": "whisper-large-v3", "response_format": "text"},
-                    timeout=120,
-                )
-
-            if response.status_code == 200:
-                transcript = response.text.strip()
-                logger.info(f"Whisper transcript: {len(transcript)} chars")
-                return transcript
-            else:
-                logger.warning(f"Groq Whisper API error: {response.status_code} {response.text[:200]}")
-                return ""
-        except Exception as e:
-            logger.warning(f"Whisper transcription failed: {e}")
-            return ""
+        from x_reader.fetchers.whisper import transcribe_audio
+        return transcribe_audio(audio_path)
 
 
 async def fetch_youtube(url: str, sub_lang: str = "en") -> Dict[str, Any]:
