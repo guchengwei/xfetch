@@ -1,0 +1,7 @@
+{
+  "name": "x-reader",
+  "description": "URL content pipeline with video transcription, content analysis, and GitHub archival",
+  "version": "1.1.0",
+  "author": { "name": "guchengwei" },
+  "repository": "https://github.com/guchengwei/x-reader"
+}
