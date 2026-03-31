@@ -1,0 +1,23 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "id": "123",
+    "url": "https://x.com/alice/status/123",
+    "text": "hello from fixture",
+    "author": {
+      "name": "Alice Example",
+      "screen_name": "alice"
+    },
+    "likes": 1,
+    "retweets": 2,
+    "bookmarks": 0,
+    "views": 4,
+    "replies": 3,
+    "created_at": "Tue Mar 31 00:00:00 +0000 2026",
+    "lang": "en",
+    "media": {
+      "all": []
+    }
+  }
+}
