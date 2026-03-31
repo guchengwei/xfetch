@@ -9,6 +9,17 @@ class RuntimeConfig:
     site_root: Path
     timezone: str = "UTC"
     runtime_version: str = "0.1.0"
+    publish_branch: str = "main"
+    site_subdir: str = "site"
+
+
+@dataclass(slots=True)
+class PublishTargetConfig:
+    repo_owner: str
+    repo_name: str
+    branch: str = "main"
+    content_subdir: str = "content"
+    site_subdir: str = "site"
 
 
 def _resolve_path(value: str | Path) -> Path:
