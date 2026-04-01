@@ -137,15 +137,24 @@ python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-re
 python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
 ```
 
-Telegram bot command:
+Telegram bot setup wizard:
 ```bash
 pip install -e .[telegram-bot]
+python -m xfetch setup-telegram-bot
+# or:
+./scripts/setup-telegram-bot
+```
+
+The setup wizard lets you paste the bot token once, writes a local runtime env file with 0600 permissions, and keeps the main runtime command portable across macOS and Linux.
+
+Manual bot command:
+```bash
 python -m xfetch telegram-bot \
   --token "$TELEGRAM_BOT_TOKEN" \
   --content-root ./content-out \
   --target-repo ../target-repo \
   --repo-owner guchengwei \
-  --repo-name x-reader
+  --repo-name link-vault
 ```
 
 In Telegram, send either:

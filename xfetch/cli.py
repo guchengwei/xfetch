@@ -12,6 +12,7 @@ from .publishing.github_repo_sync import sync_bundle_to_repo
 from .publishing.url import build_pages_url
 from .storage.render import render_bundle_page
 from .telegram_bot import TelegramBotRuntimeConfig, run_telegram_bot
+from .telegram_setup import run_interactive_setup
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     telegram_bot.add_argument("--branch", default="main")
     telegram_bot.add_argument("--content-subdir", default="content")
     telegram_bot.add_argument("--site-subdir", default="site")
+
+    subparsers.add_parser("setup-telegram-bot")
     return parser
 
 
@@ -210,4 +213,6 @@ def main(argv=None) -> int:
         return run_publish(args)
     if args.command == "telegram-bot":
         return run_telegram(args)
+    if args.command == "setup-telegram-bot":
+        return run_interactive_setup()
     return 0
