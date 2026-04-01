@@ -145,7 +145,7 @@ python -m xfetch setup-telegram-bot
 ./scripts/setup-telegram-bot
 ```
 
-The setup wizard lets you paste the bot token once, writes a local runtime env file with 0600 permissions, and keeps the main runtime command portable across macOS and Linux.
+The setup wizard lets you paste the bot token once, writes a local runtime env file with 0600 permissions, installs a per-user service for the current OS, and starts it. The runtime contract stays portable across macOS and Linux.
 
 Manual bot command:
 ```bash
