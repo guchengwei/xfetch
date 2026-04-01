@@ -137,6 +137,24 @@ python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-re
 python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
 ```
 
+Telegram bot command:
+```bash
+pip install -e .[telegram-bot]
+python -m xfetch telegram-bot \
+  --token "$TELEGRAM_BOT_TOKEN" \
+  --content-root ./content-out \
+  --target-repo ../target-repo \
+  --repo-owner guchengwei \
+  --repo-name x-reader
+```
+
+In Telegram, send either:
+- `/save https://x.com/.../status/...`
+- or just paste a supported URL
+
+If target repo options are configured, the bot ingests and publishes immediately.
+Otherwise it only saves a local portable bundle.
+
 Publish notes:
 - `publish` assumes the target repo already has git remote/auth configured
 - GitHub Pages deployment happens in GitHub Actions on pushes to `main`
