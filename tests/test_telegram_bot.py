@@ -8,8 +8,8 @@ from xfetch.telegram_bot import (
     LEGACY_TELEGRAM_COMMANDS,
     PRIMARY_TELEGRAM_COMMAND,
     SaveResult,
-    _merge_bot_commands,
     build_save_reply,
+    parse_plaintext_save,
     parse_save_command,
     save_url,
 )
@@ -32,19 +32,18 @@ def test_parse_save_command_returns_none_without_url():
 
 
 
-def test_merge_bot_commands_preserves_existing_entries_without_registering_start():
-    from telegram import BotCommand
+def test_parse_plaintext_save_accepts_plain_save_command():
+    assert parse_plaintext_save("save https://x.com/alice/status/123") == "https://x.com/alice/status/123"
 
-    merged = _merge_bot_commands(
-        [
-            BotCommand("new", "Create something new"),
-            BotCommand("start", "Old description"),
-        ]
-    )
 
-    assert [command.command for command in merged] == [PRIMARY_TELEGRAM_COMMAND, "new", "start"]
-    assert merged[1].description == "Create something new"
-    assert merged[2].description == "Old description"
+
+def test_parse_plaintext_save_accepts_plain_link_command():
+    assert parse_plaintext_save("link https://x.com/alice/status/123") == "https://x.com/alice/status/123"
+
+
+
+def test_parse_plaintext_save_rejects_non_url_argument():
+    assert parse_plaintext_save("save not-a-url") is None
 
 
 

@@ -45,11 +45,25 @@ def parse_save_command(text: str | None) -> str | None:
     parts = text.strip().split(maxsplit=1)
     if len(parts) != 2:
         return None
-    command = parts[0].split("@")[0].lstrip("/")
+    command = parts[0].split("@")[0].lstrip("/").lower()
     if command not in TELEGRAM_COMMANDS:
         return None
     url = parts[1].strip()
     return url or None
+
+
+def parse_plaintext_save(text: str | None) -> str | None:
+    if not text:
+        return None
+    parts = text.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return None
+    if parts[0].lower() not in TELEGRAM_COMMANDS:
+        return None
+    url = parts[1].strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return None
+    return url
 
 
 def _load_publish_json(path: Path) -> dict:
@@ -164,7 +178,8 @@ async def _save(update, context) -> None:
 
 
 async def _fallback_text(update, context) -> None:
-    url = (update.message.text or "").strip() if update.message else ""
+    text = (update.message.text or "").strip() if update.message else ""
+    url = parse_plaintext_save(text) or text
     if url.startswith("http://") or url.startswith("https://"):
         runtime: TelegramBotRuntimeConfig = context.application.bot_data["xfetch_runtime"]
         try:
@@ -184,29 +199,8 @@ async def _fallback_text(update, context) -> None:
         await update.message.reply_text(build_save_reply(result))
         return
 
-    await update.message.reply_text(f"Send /{PRIMARY_TELEGRAM_COMMAND} <x-url> or just paste a supported URL.")
+    await update.message.reply_text("Send save <x-url> or just paste a supported URL.")
 
-
-
-def _merge_bot_commands(existing_commands):
-    from telegram import BotCommand
-
-    preferred_commands = [
-        BotCommand(PRIMARY_TELEGRAM_COMMAND, "Fetch and archive a supported link"),
-    ]
-    merged: list[BotCommand] = []
-    seen: set[str] = set()
-    for command in [*preferred_commands, *existing_commands]:
-        if command.command in seen:
-            continue
-        merged.append(command)
-        seen.add(command.command)
-    return merged
-
-
-async def _post_init(application) -> None:
-    existing_commands = await application.bot.get_my_commands()
-    await application.bot.set_my_commands(_merge_bot_commands(existing_commands))
 
 
 def run_telegram_bot(runtime: TelegramBotRuntimeConfig) -> int:
@@ -215,7 +209,7 @@ def run_telegram_bot(runtime: TelegramBotRuntimeConfig) -> int:
     except ImportError as exc:
         raise ImportError("Install Telegram bot support with: pip install -e .[telegram-bot]") from exc
 
-    application = Application.builder().token(runtime.token).post_init(_post_init).build()
+    application = Application.builder().token(runtime.token).build()
     application.bot_data["xfetch_runtime"] = runtime
     application.add_handler(CommandHandler("start", _start))
     application.add_handler(CommandHandler(PRIMARY_TELEGRAM_COMMAND, _save))
