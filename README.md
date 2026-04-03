@@ -132,6 +132,7 @@ Current package scope is:
 - single X URL -> normalized local content bundle
 - generic web URL -> normalized local content bundle
 - RSS/Atom feed URL -> normalized local content bundle
+- Telegram public post/channel URL -> normalized local content bundle
 - WeChat article URL -> normalized local content bundle
 - Xiaohongshu note URL -> normalized local content bundle
 - YouTube video URL -> normalized local content bundle
@@ -147,6 +148,7 @@ python -m xfetch --help
 python -m xfetch ingest "https://x.com/jack/status/20"
 python -m xfetch ingest "https://example.com/posts/123"
 python -m xfetch ingest "https://example.com/feed.xml"
+python -m xfetch ingest "https://t.me/ai_daily/123"
 python -m xfetch ingest "https://mp.weixin.qq.com/s/example"
 python -m xfetch ingest "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"
 python -m xfetch ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"

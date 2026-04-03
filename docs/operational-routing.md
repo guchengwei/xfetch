@@ -14,4 +14,4 @@ Rules:
 Audit notes (2026-04-03):
 - xfetch package runtime is the canonical publish spine.
 - x-reader still exists as a broader reader, but it is no longer the active save/publish path.
-- New connector migration work in xfetch currently covers: X, RSS, generic web.
+- xfetch connector coverage now includes: X, generic web, RSS, Telegram public URLs, WeChat, Xiaohongshu, YouTube, and Bilibili.

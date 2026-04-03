@@ -1,6 +1,7 @@
 from xfetch.connectors.registry import connector_registry, pick_connector
 from xfetch.connectors.bilibili import BilibiliConnector
 from xfetch.connectors.rss import RSSConnector
+from xfetch.connectors.telegram import TelegramConnector
 from xfetch.connectors.wechat import WeChatConnector
 from xfetch.connectors.web import WebConnector
 from xfetch.connectors.x import XConnector
@@ -8,9 +9,9 @@ from xfetch.connectors.xiaohongshu import XiaohongshuConnector
 from xfetch.connectors.youtube import YouTubeConnector
 
 
-def test_connector_registry_starts_with_x_then_rss_then_wechat_then_xiaohongshu_then_youtube_then_bilibili_then_web():
+def test_connector_registry_starts_with_x_then_rss_then_telegram_then_wechat_then_xiaohongshu_then_youtube_then_bilibili_then_web():
     registry = connector_registry()
-    assert [type(connector) for connector in registry[:7]] == [XConnector, RSSConnector, WeChatConnector, XiaohongshuConnector, YouTubeConnector, BilibiliConnector, WebConnector]
+    assert [type(connector) for connector in registry[:8]] == [XConnector, RSSConnector, TelegramConnector, WeChatConnector, XiaohongshuConnector, YouTubeConnector, BilibiliConnector, WebConnector]
 
 
 def test_pick_connector_returns_x_connector_for_x_urls():
@@ -21,6 +22,11 @@ def test_pick_connector_returns_x_connector_for_x_urls():
 def test_pick_connector_returns_rss_connector_for_feed_urls():
     connector = pick_connector("https://example.com/feed.xml")
     assert isinstance(connector, RSSConnector)
+
+
+def test_pick_connector_returns_telegram_connector_for_telegram_urls():
+    connector = pick_connector("https://t.me/ai_daily/123")
+    assert isinstance(connector, TelegramConnector)
 
 
 def test_pick_connector_returns_wechat_connector_for_wechat_urls():
