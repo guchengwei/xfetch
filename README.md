@@ -121,20 +121,30 @@ python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
 
 ## 📦 New package runtime
 
-A new package entrypoint now exists for the migration path.
+xfetch is now the canonical save/publish runtime.
+Operational path:
+- Hermes natural-language save request
+- xfetch ingest + bundle write
+- sync/publish into `/Users/zion/link-vault-publish`
+- GitHub Pages deployment from `guchengwei/link-vault`
+
 Current package scope is:
 - single X URL -> normalized local content bundle
+- generic web URL -> normalized local content bundle
+- RSS/Atom feed URL -> normalized local content bundle
 - local bundle sync into a target repo working tree
 - git-backed publish into a target repo with GitHub Pages URL metadata
 
-Legacy scripts remain the broader feature surface during migration.
+Legacy scripts remain the broader feature surface during migration, but x-reader is no longer the operational save/publish path.
 
 ```bash
 pip install -e .[dev]
 python -m xfetch --help
 python -m xfetch ingest "https://x.com/jack/status/20"
-python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
-python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo ../target-repo --repo-owner guchengwei --repo-name x-reader
+python -m xfetch ingest "https://example.com/posts/123"
+python -m xfetch ingest "https://example.com/feed.xml"
+python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
+python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
 ```
 
 Publish notes:
