@@ -1,4 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-cd /Users/zion/x-tweet-fetcher
-exec /Users/zion/miniconda3/bin/python -m xfetch setup-telegram-bot

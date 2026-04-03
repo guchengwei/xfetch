@@ -17,7 +17,8 @@ def render_bundle_page(bundle_dir: Path, site_root: Path, public_url: str | None
     canonical_url = document.get("canonical_url") or ""
     author_handle = document.get("author_handle") or "unknown"
     created_at = document.get("created_at") or "unknown"
-    text = html.escape(document.get("text") or "").replace("\n", "<br>\n")
+    body_source = document.get("text") or document.get("markdown") or ""
+    text = html.escape(body_source).replace("\n", "<br>\n")
     canonical_tag = f'<link rel="canonical" href="{html.escape(public_url)}">\n' if public_url else ""
 
     rendered = (

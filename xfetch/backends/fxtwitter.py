@@ -34,17 +34,50 @@ def _normalize_created_at(value: str | None) -> str | None:
     return None
 
 
+def _extract_article_text(article: dict | None) -> str:
+    if not article:
+        return ""
+
+    parts: list[str] = []
+    title = (article.get("title") or "").strip()
+    preview_text = (article.get("preview_text") or "").strip()
+    if title:
+        parts.append(title)
+    if preview_text and preview_text != title:
+        parts.append(preview_text)
+
+    content = article.get("content") or {}
+    for block in content.get("blocks") or []:
+        text = " ".join(str(block.get("text") or "").split())
+        if text:
+            parts.append(text)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if part not in seen:
+            deduped.append(part)
+            seen.add(part)
+    return "\n\n".join(deduped)
+
+
+
 def parse_fxtwitter_payload(payload: dict) -> dict:
     tweet = payload.get("tweet") or {}
     author = tweet.get("author") or {}
     canonical_url = tweet.get("url") or ""
     tweet_id = str(tweet.get("id") or "")
+    raw_text = ((tweet.get("raw_text") or {}).get("text") or "").strip()
+    article_text = _extract_article_text(tweet.get("article"))
+    text = (tweet.get("text") or "").strip()
+    if not text or text == raw_text:
+        text = article_text or raw_text or text
     return {
         "tweet_id": tweet_id,
         "canonical_url": canonical_url,
         "screen_name": author.get("screen_name") or "",
         "display_name": author.get("name") or "",
-        "text": tweet.get("text") or "",
+        "text": text,
         "created_at": _normalize_created_at(tweet.get("created_at")),
         "language": tweet.get("lang") or None,
         "stats": {

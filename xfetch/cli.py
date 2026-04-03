@@ -11,8 +11,6 @@ from .publishing.git_publish import publish_repo
 from .publishing.github_repo_sync import sync_bundle_to_repo
 from .publishing.url import build_pages_url
 from .storage.render import render_bundle_page
-from .telegram_bot import TelegramBotRuntimeConfig, run_telegram_bot
-from .telegram_setup import run_interactive_setup
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,17 +42,6 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--site-subdir", default="site")
     publish.add_argument("--json", action="store_true")
 
-    telegram_bot = subparsers.add_parser("telegram-bot")
-    telegram_bot.add_argument("--token", required=True)
-    telegram_bot.add_argument("--content-root")
-    telegram_bot.add_argument("--target-repo")
-    telegram_bot.add_argument("--repo-owner")
-    telegram_bot.add_argument("--repo-name")
-    telegram_bot.add_argument("--branch", default="main")
-    telegram_bot.add_argument("--content-subdir", default="content")
-    telegram_bot.add_argument("--site-subdir", default="site")
-
-    subparsers.add_parser("setup-telegram-bot")
     return parser
 
 
@@ -187,21 +174,6 @@ def run_publish(args) -> int:
     return 0
 
 
-def run_telegram(args) -> int:
-    runtime = TelegramBotRuntimeConfig(
-        token=args.token,
-        content_root=Path(args.content_root).resolve() if args.content_root else None,
-        target_repo=Path(args.target_repo).resolve() if args.target_repo else None,
-        repo_owner=args.repo_owner,
-        repo_name=args.repo_name,
-        branch=args.branch,
-        content_subdir=args.content_subdir,
-        site_subdir=args.site_subdir,
-    )
-    return run_telegram_bot(runtime)
-
-
-
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -211,8 +183,4 @@ def main(argv=None) -> int:
         return run_sync(args)
     if args.command == "publish":
         return run_publish(args)
-    if args.command == "telegram-bot":
-        return run_telegram(args)
-    if args.command == "setup-telegram-bot":
-        return run_interactive_setup()
     return 0
