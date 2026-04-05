@@ -72,7 +72,7 @@ def test_build_parser_exposes_sync_command():
         "--repo-owner",
         "guchengwei",
         "--repo-name",
-        "x-reader",
+        "link-vault",
     ])
     assert args.command == "sync"
     assert args.bundle_dir == "./content-out/2026-03/x-123-alice"
@@ -90,7 +90,7 @@ def test_build_parser_exposes_publish_command():
         "--repo-owner",
         "guchengwei",
         "--repo-name",
-        "x-reader",
+        "link-vault",
     ])
     assert args.command == "publish"
     assert args.bundle_dir == "./content-out/2026-03/x-123-alice"
@@ -159,7 +159,7 @@ def test_cli_sync_writes_into_target_repo(tmp_path):
         "--repo-owner",
         "guchengwei",
         "--repo-name",
-        "x-reader",
+        "link-vault",
     ])
     assert rc == 0
     assert (target_repo / "content" / "2026-03" / "x-123-alice" / "document.json").exists()
@@ -179,12 +179,12 @@ def test_cli_publish_writes_public_url_and_revision(tmp_path):
         "--repo-owner",
         "guchengwei",
         "--repo-name",
-        "x-reader",
+        "link-vault",
     ])
     assert rc == 0
     publish_data = json.loads((bundle_dir / "publish.json").read_text(encoding="utf-8"))
     assert publish_data["published"] is True
-    assert publish_data["public_url"] == "https://guchengwei.github.io/x-reader/d/x-123-alice/"
+    assert publish_data["public_url"] == "https://guchengwei.github.io/link-vault/d/x-123-alice/"
     assert publish_data["revision"]
 
 
@@ -202,6 +202,6 @@ def test_cli_publish_returns_nonzero_for_non_git_target_repo(tmp_path):
         "--repo-owner",
         "guchengwei",
         "--repo-name",
-        "x-reader",
+        "link-vault",
     ])
     assert rc != 0

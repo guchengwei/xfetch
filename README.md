@@ -119,16 +119,42 @@ python3 scripts/fetch_china.py --url "https://mp.weixin.qq.com/s/..."
 python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
 ```
 
-## 📦 New package runtime
+## 📦 xfetch runtime
 
-xfetch is now the canonical save/publish runtime.
-Operational path:
-- Hermes natural-language save request
-- xfetch ingest + bundle write
-- sync/publish into `/Users/zion/link-vault-publish`
-- GitHub Pages deployment from `guchengwei/link-vault`
+This repo still carries the historical `x-tweet-fetcher` name, but `xfetch` is now the canonical save/publish runtime.
 
-Current package scope is:
+### What lives where
+
+- `xfetch` repo = ingestion + normalization + bundle rendering runtime
+- `link-vault` repo = clean published artifact store and GitHub Pages surface
+- Hermes = natural-language front door that calls into the runtime
+
+That split is intentional: runtime code and published content evolve on different cadences and may run in different environments.
+
+### End-to-end pipeline
+
+```text
+Hermes request
+  -> xfetch ingest
+  -> normalized content bundle
+  -> sync/publish into /Users/zion/link-vault-publish
+  -> push guchengwei/link-vault
+  -> GitHub Pages serves the rendered page
+```
+
+### Bundle contract
+
+Each saved item becomes a portable bundle directory containing:
+
+- `document.json` — normalized structured record
+- `index.md` — Markdown rendering of the content
+- `publish.json` — publish status + target metadata + public URL
+- `assets/` — downloaded inline media when present
+
+When published, xfetch also renders a static page into the target repo's `site/` tree so GitHub Pages can serve it directly.
+
+### Current package scope
+
 - single X URL -> normalized local content bundle
 - X longform articles preserve embedded code blocks and inline images from entity payloads
 - inline X article images are downloaded into bundle `assets/` and rendered on the published page
@@ -142,11 +168,15 @@ Current package scope is:
 - local bundle sync into a target repo working tree
 - git-backed publish into a target repo with GitHub Pages URL metadata
 
-Legacy scripts remain the broader feature surface during migration, but x-reader is no longer the operational save/publish path.
+Legacy scripts remain the broader feature surface during migration, but `x-reader` is no longer the operational save/publish path.
+
+### CLI flow
 
 ```bash
 pip install -e .[dev]
 python -m xfetch --help
+
+# 1) Ingest a URL into a portable local bundle
 python -m xfetch ingest "https://x.com/jack/status/20"
 python -m xfetch ingest "https://example.com/posts/123"
 python -m xfetch ingest "https://example.com/feed.xml"
@@ -155,14 +185,22 @@ python -m xfetch ingest "https://mp.weixin.qq.com/s/example"
 python -m xfetch ingest "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"
 python -m xfetch ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 python -m xfetch ingest "https://www.bilibili.com/video/BV1xx411c7mD"
+
+# 2) Sync the bundle into the clean publish working tree
 python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
+
+# 3) Publish by committing + pushing the target repo
 python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
 ```
 
-Publish notes:
+### Publish notes
+
+- `sync` copies bundle content plus rendered site output into the target repo working tree, but does not push
+- `publish` performs the sync, updates publish metadata, commits the target repo, and pushes it
 - `publish` assumes the target repo already has git remote/auth configured
 - GitHub Pages deployment happens in GitHub Actions on pushes to `main`
 - the Pages workflow deploys the already-rendered `site/` directory; scraping and rendering stay local
+- current public surface: https://guchengwei.github.io/link-vault/
 
 ## 🖥️ Works with Claude Code / CC
 

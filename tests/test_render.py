@@ -9,7 +9,7 @@ def test_render_bundle_page_writes_index_html(tmp_path):
         encoding="utf-8",
     )
     out_dir = tmp_path / "site"
-    page = render_bundle_page(bundle_dir, out_dir, public_url="https://guchengwei.github.io/x-reader/d/x-123-alice/")
+    page = render_bundle_page(bundle_dir, out_dir, public_url="https://guchengwei.github.io/link-vault/d/x-123-alice/")
     assert page == out_dir / "d" / "x-123-alice" / "index.html"
     html = page.read_text(encoding="utf-8")
     assert "<title>Hello</title>" in html

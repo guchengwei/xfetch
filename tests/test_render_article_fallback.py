@@ -10,7 +10,7 @@ def test_render_bundle_page_uses_markdown_when_text_empty(tmp_path):
     )
     out_dir = tmp_path / "site"
 
-    page = render_bundle_page(bundle_dir, out_dir, public_url="https://guchengwei.github.io/x-reader/d/x-123-alice/")
+    page = render_bundle_page(bundle_dir, out_dir, public_url="https://guchengwei.github.io/link-vault/d/x-123-alice/")
 
     html = page.read_text(encoding="utf-8")
     assert "Rendered article body" in html

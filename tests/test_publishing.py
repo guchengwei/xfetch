@@ -43,7 +43,7 @@ def test_sync_bundle_to_repo_copies_bundle_into_target_subdir(tmp_path):
     rendered_page = _make_rendered_page(tmp_path / "source-site")
     target_repo = tmp_path / "target-repo"
     target_repo.mkdir()
-    publish_target = PublishTargetConfig(repo_owner="guchengwei", repo_name="x-reader")
+    publish_target = PublishTargetConfig(repo_owner="guchengwei", repo_name="link-vault")
 
     result = sync_bundle_to_repo(
         bundle_dir,
@@ -71,7 +71,7 @@ def test_sync_bundle_to_repo_updates_publish_metadata(tmp_path):
     rendered_page = _make_rendered_page(tmp_path / "source-site")
     target_repo = tmp_path / "target-repo"
     target_repo.mkdir()
-    publish_target = PublishTargetConfig(repo_owner="guchengwei", repo_name="x-reader")
+    publish_target = PublishTargetConfig(repo_owner="guchengwei", repo_name="link-vault")
 
     sync_bundle_to_repo(
         bundle_dir,
@@ -86,7 +86,7 @@ def test_sync_bundle_to_repo_updates_publish_metadata(tmp_path):
     assert publish_data["public_url"] is None
     assert publish_data["target"]["type"] == "github_pages"
     assert publish_data["target"]["repo_owner"] == "guchengwei"
-    assert publish_data["target"]["repo_name"] == "x-reader"
+    assert publish_data["target"]["repo_name"] == "link-vault"
     assert publish_data["target"]["branch"] == "main"
     assert publish_data["target"]["bundle_path"] == "content/2026-03/x-123-alice"
     assert publish_data["target"]["site_path"] == "site/d/x-123-alice/index.html"
