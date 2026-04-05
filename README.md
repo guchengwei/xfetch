@@ -1,184 +1,130 @@
-<div align="center">
+# xfetch
 
-# 🦞 xfetch
+Chat-first link preservation runtime.
 
-**Chat-first link preservation runtime for X, web, feeds, Telegram, WeChat, Xiaohongshu, YouTube, and Bilibili.**
+xfetch ingests a supported URL, normalizes it into a portable content bundle, and can sync/publish that bundle into a separate content repo for durable public hosting.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue.svg)](https://github.com/openclaw/openclaw)
-[![Python 3.7+](https://img.shields.io/badge/Python-3.7+-green.svg)](https://www.python.org)
-[![GitHub stars](https://img.shields.io/github/stars/guchengwei/xfetch?style=social)](https://github.com/guchengwei/xfetch)
+Current supported source families:
+- X
+- generic web pages
+- RSS/Atom feeds
+- public Telegram posts/channels
+- WeChat articles
+- Xiaohongshu notes
+- YouTube videos
+- Bilibili videos
 
-*Portable bundles · Clean publish repo split · Works locally and in agent-driven save flows*
+Why xfetch exists:
+- preserve content, not just bookmark links
+- keep runtime code separate from published content artifacts
+- work cleanly behind Hermes or other agent/chat front doors
+- produce portable bundles that can be moved, synced, and published anywhere
 
-[Quick Start](#-quick-start) · [Backends](#-three-backends) · [Capabilities](#-capabilities) · [Self-hosted Nitter](#-self-hosted-nitter-setup) · [Claude Code & CC](#-works-with-claude-code--cc)
+Project note:
+- this project previously lived under legacy names like x-reader / x-tweet-fetcher
+- the intended identity now is xfetch
 
-</div>
+## What xfetch does
 
----
+For each supported URL, xfetch can:
+1. detect the right connector
+2. fetch and normalize the source into a common document shape
+3. write a local bundle directory
+4. render a static HTML page for publication
+5. sync/publish that bundle into a separate target repo
+6. return a durable GitHub Pages URL
 
-> Note: this project previously lived under legacy names (`x-reader` / `x-tweet-fetcher`). The current runtime and intended identity is `xfetch`.
+In practice, xfetch is the runtime layer in a larger flow:
+- Hermes or another caller receives a natural-language save request
+- xfetch ingests the URL and writes a normalized bundle
+- xfetch syncs/publishes the bundle into a clean content repo
+- GitHub Pages serves the rendered artifact
 
-## 😤 Problem
+## Repo roles
 
-```
-You: fetch that tweet / list / article for me
-AI:  I can't access X/Twitter. Please copy-paste the content manually.
+xfetch intentionally separates runtime from content storage.
 
-You: ...seriously?
-```
+- xfetch repo
+  - ingestion runtime
+  - connectors
+  - bundle writer
+  - rendering logic
+  - sync/publish commands
 
-X has no free API. Scraping gets you blocked. Browser automation is fragile and won't work in headless environments.
+- link-vault repo
+  - clean published artifact store
+  - GitHub Pages surface
+  - public item pages and homepage index
 
-**x-tweet-fetcher** solves this with **smart backend routing**: Nitter for zero-dependency speed, Playwright for full-feature coverage, auto fallback between them.
+That split keeps code history and content history independent, and makes it easier to run ingestion in one environment while publishing in another.
 
-## 🔀 Three Backends
-
-```bash
-# Auto mode (default) — Nitter first, browser fallback
-python3 scripts/fetch_tweet.py --user elonmusk
-
-# Nitter only — zero dependency, no browser
-python3 scripts/fetch_tweet.py --user elonmusk --backend nitter
-
-# Browser only — full features (lists, articles)
-python3 scripts/fetch_tweet.py --list 1455045069516357634 --backend browser
-```
-
-| Backend | Deps | Speed | Features |
-|---------|------|-------|----------|
-| **nitter** | None (stdlib only) | ⚡ Fast | Timeline, search, replies, profile, mentions |
-| **browser** | Playwright/Chromium | 🐢 Slower | Everything above + **Lists** + **Articles** + **fetch_china** |
-| **auto** (default) | Best available | ⚡→🐢 | Tries nitter first, falls back to browser |
-
-> **OpenClaw users**: Playwright + Chromium are built-in. `--backend auto` just works — no extra install needed.
-
-## 📊 Capabilities
-
-| Feature | Backend | Output |
-|---------|---------|--------|
-| Single tweet | FxTwitter (always) | text, stats, media, quotes |
-| Reply comments | nitter / browser | threaded comment list |
-| User timeline | nitter / browser | paginated tweet list |
-| @mentions monitor | nitter / browser | incremental new mentions |
-| Keyword search | nitter / browser | real-time tweet stream |
-| **X Lists** | **browser only** | list member tweets |
-| **X Articles** | **browser only** | full long-form content |
-| User profile analysis | nitter + LLM | MBTI, Big Five, topic graph |
-| WeChat article search | Sogou (direct HTTP) | title, url, author, date |
-| **WeChat/Weibo/Bilibili** | **browser only** | via fetch_china.py |
-| Tweet growth tracker | FxTwitter API | growth curves, burst detection |
-
-> **For AI Agents**: All output is structured JSON. Import as Python modules for direct integration. Exit codes are cron-friendly (`0`=nothing new, `1`=new content).
-
-## 🚀 Quick Start
-
-### Single tweet (zero setup)
-
-```bash
-# Works immediately — no Nitter, no browser needed
-python3 scripts/fetch_tweet.py --url https://x.com/elonmusk/status/123456789
-```
-
-### Timeline, search, replies
-
-```bash
-# Set your Nitter instance URL (for nitter/auto mode)
-export NITTER_URL=http://127.0.0.1:8788
-
-# User timeline
-python3 scripts/fetch_tweet.py --user elonmusk --limit 20
-
-# Keyword search — real-time tweets
-python3 scripts/nitter_client.py --search "AI agent"
-
-# Tweet replies
-python3 scripts/fetch_tweet.py --url https://x.com/elonmusk/status/123456789 --replies
-
-# @mentions monitoring (cron-friendly)
-python3 scripts/fetch_tweet.py --monitor @yourusername
-
-# User profile analysis
-python3 scripts/x-profile-analyzer.py --user elonmusk --count 100
-```
-
-### Lists & Articles (browser backend)
-
-```bash
-# X List — requires Playwright
-python3 scripts/fetch_tweet.py --list 1455045069516357634 --backend browser
-
-# X Article
-python3 scripts/fetch_tweet.py --article https://x.com/user/article/123 --backend browser
-
-# WeChat / Weibo / Bilibili
-python3 scripts/fetch_china.py --url "https://mp.weixin.qq.com/s/..."
-```
-
-### WeChat search (always zero-dep)
-
-```bash
-python3 scripts/sogou_wechat.py --keyword "AI Agent" --limit 5 --json
-```
-
-## 📦 xfetch runtime
-
-This repo still carries the historical `x-tweet-fetcher` name, but `xfetch` is now the canonical save/publish runtime.
-
-### What lives where
-
-- `xfetch` repo = ingestion + normalization + bundle rendering runtime
-- `link-vault` repo = clean published artifact store and GitHub Pages surface
-- Hermes = natural-language front door that calls into the runtime
-
-That split is intentional: runtime code and published content evolve on different cadences and may run in different environments.
-
-### End-to-end pipeline
+## End-to-end architecture
 
 ```text
 Hermes request
   -> xfetch ingest
-  -> normalized content bundle
-  -> sync/publish into /Users/zion/link-vault-publish
-  -> push guchengwei/link-vault
-  -> GitHub Pages serves the rendered page
+  -> normalized bundle written locally
+  -> xfetch sync/publish into target repo
+  -> target repo push
+  -> GitHub Pages serves rendered page
 ```
 
-### Bundle contract
+Current operational path on this machine:
 
-Each saved item becomes a portable bundle directory containing:
+```text
+Hermes
+  -> xfetch
+  -> /Users/zion/link-vault-publish
+  -> guchengwei/link-vault
+  -> https://guchengwei.github.io/link-vault/
+```
 
-- `document.json` — normalized structured record
-- `index.md` — Markdown rendering of the content
-- `publish.json` — publish status + target metadata + public URL
-- `assets/` — downloaded inline media when present
+## Bundle contract
 
-When published, xfetch also renders a static page into the target repo's `site/` tree so GitHub Pages can serve it directly.
+Each saved item is written as a portable bundle directory.
 
-### Current package scope
+Typical structure:
 
-- single X URL -> normalized local content bundle
-- X longform articles preserve embedded code blocks and inline images from entity payloads
-- inline X article images are downloaded into bundle `assets/` and rendered on the published page
-- generic web URL -> normalized local content bundle
-- RSS/Atom feed URL -> normalized local content bundle
-- Telegram public post/channel URL -> normalized local content bundle
-- WeChat article URL -> normalized local content bundle
-- Xiaohongshu note URL -> normalized local content bundle
-- YouTube video URL -> normalized local content bundle
-- Bilibili video URL -> normalized local content bundle
-- local bundle sync into a target repo working tree
-- git-backed publish into a target repo with GitHub Pages URL metadata
+```text
+content-out/YYYY-MM/<slug>/
+  document.json
+  index.md
+  publish.json
+  assets/
+```
 
-Legacy scripts remain the broader feature surface during migration, but `x-reader` is no longer the operational save/publish path.
+Bundle files:
+- document.json
+  - normalized structured record
+  - source metadata, title, author, timestamps, content fields, lineage
+- index.md
+  - markdown rendering of the captured content
+- publish.json
+  - publish state, target metadata, public URL, revision
+- assets/
+  - downloaded inline media when present
 
-### CLI flow
+When published, xfetch also renders a static HTML page into the target repo's site tree so GitHub Pages can serve it directly.
+
+## CLI
+
+Install locally:
 
 ```bash
 pip install -e .[dev]
 python -m xfetch --help
+```
 
-# 1) Ingest a URL into a portable local bundle
+Primary commands:
+- ingest
+- sync
+- publish
+
+### 1) Ingest
+
+Ingest writes a local normalized bundle.
+
+```bash
 python -m xfetch ingest "https://x.com/jack/status/20"
 python -m xfetch ingest "https://example.com/posts/123"
 python -m xfetch ingest "https://example.com/feed.xml"
@@ -187,200 +133,122 @@ python -m xfetch ingest "https://mp.weixin.qq.com/s/example"
 python -m xfetch ingest "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"
 python -m xfetch ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 python -m xfetch ingest "https://www.bilibili.com/video/BV1xx411c7mD"
-
-# 2) Sync the bundle into the clean publish working tree
-python -m xfetch sync ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
-
-# 3) Publish by committing + pushing the target repo
-python -m xfetch publish ./content-out/2006-03/x-20-jack --target-repo /Users/zion/link-vault-publish --repo-owner guchengwei --repo-name link-vault
 ```
 
-### Publish notes
-
-- `sync` copies bundle content plus rendered site output into the target repo working tree, but does not push
-- `publish` performs the sync, updates publish metadata, commits the target repo, and pushes it
-- `publish` assumes the target repo already has git remote/auth configured
-- GitHub Pages deployment happens in GitHub Actions on pushes to `main`
-- the Pages workflow deploys the already-rendered `site/` directory; scraping and rendering stay local
-- current public surface: https://guchengwei.github.io/link-vault/
-
-## 🖥️ Works with Claude Code / CC
-
-Since x-tweet-fetcher has **zero mandatory dependencies**, it works perfectly in constrained environments:
-
-| Environment | nitter mode | browser mode | Notes |
-|-------------|:----------:|:------------:|-------|
-| **Claude Code (CC)** | ✅ | ❌ | No browser runtime |
-| **OpenClaw** | ✅ | ✅ | Playwright built-in |
-| **VPS (headless Linux)** | ✅ | ✅* | *needs `pip install playwright` |
-| **Mac / Windows** | ✅ | ✅* | *needs `pip install playwright` |
-| **CI/CD pipelines** | ✅ | ⚠️ | Possible but heavy |
-| **Docker containers** | ✅ | ⚠️ | Needs Chromium in image |
-| **Termux (Android)** | ✅ | ❌ | No Chromium |
+Optional JSON output:
 
 ```bash
-# In Claude Code (nitter mode, zero deps):
-export NITTER_URL=http://your-vps:8788
-python3 scripts/fetch_tweet.py --user YuLin807 --limit 10
-
-# In OpenClaw (auto mode, full features):
-python3 scripts/fetch_tweet.py --user YuLin807 --limit 10
-# → auto-detects Nitter, falls back to Playwright if needed
+python -m xfetch ingest "https://x.com/jack/status/20" --json
 ```
 
-## 🔧 Self-hosted Nitter Setup
-
-> ⚠️ **Public Nitter instances are dead or unreliable** (as of March 2026). Self-hosting is the only reliable option.
-
-### Why you need this
-
-Twitter removed guest API access in 2023. Public Nitter instances get rate-limited because thousands of users share a few accounts. **Your own instance = your own rate limits.**
-
-### 5-minute setup guide
-
-#### 1. Install dependencies
+If needed, you can override where bundles are written:
 
 ```bash
-# Ubuntu/Debian
-sudo apt install -y redis-server libpcre3-dev libsass-dev
-
-# Install Nim
-curl https://nim-lang.org/choosenim/init.sh -sSf | sh
-export PATH=$HOME/.nimble/bin:$PATH
+python -m xfetch ingest "https://x.com/jack/status/20" --content-root ./content-out
 ```
 
-#### 2. Build Nitter
+### 2) Sync
+
+Sync copies a bundle and its rendered site output into a target repo working tree, but does not commit or push.
 
 ```bash
-git clone https://github.com/zedeus/nitter
-cd nitter
-nimble build -d:release
-nimble scss
-cp nitter.example.conf nitter.conf
+python -m xfetch sync ./content-out/2006-03/x-20-jack \
+  --target-repo /Users/zion/link-vault-publish \
+  --repo-owner guchengwei \
+  --repo-name link-vault
 ```
 
-#### 3. Get X session cookies
+### 3) Publish
 
-Use a **secondary account** (not your main).
-
-1. Log into X in browser → DevTools → Application → Cookies → `x.com`
-2. Copy `auth_token` and `ct0`
-3. Create `sessions.jsonl`:
-
-```json
-{"name":"myaccount","auth_token":"YOUR_AUTH_TOKEN","ct0":"YOUR_CT0"}
-```
-
-#### 4. Configure
-
-```ini
-[Server]
-address = "127.0.0.1"  # Local only!
-port = 8788
-
-[Config]
-hmacKey = "$(openssl rand -hex 32)"
-
-[Tokens]
-tokenFile = "sessions.jsonl"
-```
-
-#### 5. Run & test
+Publish performs the sync, updates publish metadata, commits the target repo, and pushes it.
 
 ```bash
-sudo systemctl start redis-server
-./nitter
-
-# Test
-curl http://127.0.0.1:8788/YuLin807
-export NITTER_URL=http://127.0.0.1:8788
-python3 scripts/nitter_client.py --search "test"
+python -m xfetch publish ./content-out/2006-03/x-20-jack \
+  --target-repo /Users/zion/link-vault-publish \
+  --repo-owner guchengwei \
+  --repo-name link-vault
 ```
 
-### Security
+Publish assumptions:
+- the target repo already exists locally
+- the target repo already has git remote/auth configured
+- GitHub Pages deployment happens downstream in GitHub Actions after push
+- xfetch renders static site output locally; the Pages workflow serves that output rather than re-running ingestion remotely
 
-- **Bind to `127.0.0.1` only** — never expose to public internet
-- **Use a secondary X account** — session token gives full access
-- **Session tokens last ~1 year**
+## Output and publication model
 
-## 📐 How It Works
+xfetch is designed around portable local-first artifacts.
 
-```
-                    ┌─────────────┐
- --url              │  FxTwitter  │  ← Public API, no auth needed
-                    │  (free)     │
-                    └──────┬──────┘
-                           │ JSON
-              ┌────────────┴────────────┐
-              │    --backend auto       │
-              │  ┌───────┐  ┌────────┐  │       ┌──────────┐
- --user       │  │Nitter │→→│Browser │  │       │  Agent   │
- --replies    │  │(fast) │  │(full)  │  │──────▶│  (JSON)  │
- --monitor    │  │ 0 dep │  │Playwrt │  │       │          │
- --search     │  └───────┘  └────────┘  │       └──────────┘
- --list       └─────────────────────────┘
- --article
-              ┌─────────────┐
- sogou_wechat │   Sogou     │  ← Direct HTTP, no API key
- fetch_china  │  (search)   │
-              └─────────────┘
-```
+What gets produced locally:
+- a normalized bundle under content-out/
+- a rendered static page for that bundle
+- publish metadata recording the intended target and resulting public URL
 
-- **Single tweets**: [FxTwitter](https://github.com/FxEmbed/FxEmbed) — always works, zero auth
-- **Timeline / Replies / Search / Mentions**: Self-hosted [Nitter](https://github.com/zedeus/nitter) or Playwright browser
-- **Lists / Articles**: Playwright browser (Nitter doesn't support these)
-- **WeChat / China platforms**: Sogou search + fetch_china.py
+What gets stored in the target content repo:
+- copied bundle under content/
+- rendered page under site/
+- any copied assets needed for public serving
 
-## 📦 Requirements
+What becomes public:
+- per-item GitHub Pages URL, typically:
+  - https://guchengwei.github.io/link-vault/d/<slug>/
+- homepage index in the publish repo, currently:
+  - https://guchengwei.github.io/link-vault/
 
-```
-Python 3.7+     (that's it for nitter mode)
-```
+## Supported connector families
 
-| Mode | Extra requirement |
-|------|-----------------|
-| `--backend nitter` | Nothing (Python stdlib only) |
-| `--backend browser` | `pip install playwright` + `playwright install chromium` |
-| `--backend auto` | Uses whatever is available |
+xfetch currently includes connectors for:
+- x
+- rss
+- telegram
+- wechat
+- xiaohongshu
+- youtube
+- bilibili
+- web
 
-## ⏰ Cron Integration
+These all normalize into the same bundle contract, which lets downstream rendering and publication stay source-agnostic.
 
-Exit codes for automation: `0`=nothing new, `1`=new content, `2`=error.
+## Design principles
+
+- chat-first
+  - works well when invoked by Hermes or another agent
+- portable bundles
+  - saved items should remain useful outside the runtime that created them
+- runtime/content separation
+  - code repo and content repo should not be tightly coupled
+- local rendering, remote serving
+  - rendering happens locally; GitHub Pages serves prepared artifacts
+- incremental source expansion
+  - new connectors should plug into the same normalized document + bundle pipeline
+
+## Development
+
+Run targeted tests:
 
 ```bash
-# Check mentions every 30 min
-*/30 * * * * NITTER_URL=http://127.0.0.1:8788 python3 fetch_tweet.py --monitor @username
-
-# Discover tweets daily
-0 9 * * * python3 nitter_client.py --search "AI Agent" >> ~/discoveries.jsonl
+pytest tests/test_cli.py tests/test_publishing.py tests/test_render.py -q
 ```
 
-## 🤝 Contributing
+Run the whole suite:
 
-Issues and PRs welcome! Core platforms:
+```bash
+pytest -q
+```
 
-- **X/Twitter** — Nitter + Playwright backends
-- **WeChat articles** — Sogou search
+## Status
 
-Other platforms welcome as community PRs.
+xfetch is the active save/publish runtime.
 
-## 🙏 Acknowledgments
+Legacy lineage from x-reader/x-tweet-fetcher still shows up in some history and packaging details, but the active direction is:
+- xfetch as the runtime
+- link-vault as the published artifact repo
+- Hermes as the preferred chat interface
 
-- **[Nitter](https://github.com/zedeus/nitter)** by [zedeus](https://github.com/zedeus) (12.6k ⭐) — self-hosted Twitter frontend
-- **[FxTwitter](https://github.com/FxEmbed/FxEmbed)** — public API for single tweet data
-- **[Playwright](https://github.com/microsoft/playwright)** — browser automation for full-feature coverage
-- **[OpenClaw](https://github.com/openclaw/openclaw)** — AI agent framework
+## Example mental model
 
-## 📄 License
+A useful shorthand is:
+- Karakeep manages a bookmark library
+- xfetch preserves and publishes an individual item well
 
-[MIT](LICENSE)
-
----
-
-<div align="center">
-
-*Three backends. Auto fallback. Works everywhere.* 🦞
-
-**[GitHub](https://github.com/ythx-101/x-tweet-fetcher)** · **[Issues](https://github.com/ythx-101/x-tweet-fetcher/issues)** · **[OpenClaw Q&A](https://github.com/ythx-101/openclaw-qa)**
-
-</div>
+So xfetch is not trying to be a full bookmark-management product. It is the lean ingestion, normalization, and publication layer behind a preservation workflow.
