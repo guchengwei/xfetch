@@ -1,7 +1,7 @@
 # X Fetcher Executor Brief
 
 Primary plan:
-- `docs/plans/2026-03-31-x-fetcher-content-pipeline-plan.md`
+- `docs/archive/plans/2026-03-31-x-fetcher-content-pipeline-plan.md`
 
 Use x-tweet-fetcher as the implementation base.
 Do not treat link-vault as the primary codebase.
