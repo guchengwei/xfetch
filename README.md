@@ -1,21 +1,23 @@
 <div align="center">
 
-# 🦞 x-tweet-fetcher
+# 🦞 xfetch
 
-**Fetch tweets, lists, articles, and WeChat content — with smart backend routing.**
+**Chat-first link preservation runtime for X, web, feeds, Telegram, WeChat, Xiaohongshu, YouTube, and Bilibili.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue.svg)](https://github.com/openclaw/openclaw)
 [![Python 3.7+](https://img.shields.io/badge/Python-3.7+-green.svg)](https://www.python.org)
-[![GitHub stars](https://img.shields.io/github/stars/ythx-101/x-tweet-fetcher?style=social)](https://github.com/ythx-101/x-tweet-fetcher)
+[![GitHub stars](https://img.shields.io/github/stars/guchengwei/xfetch?style=social)](https://github.com/guchengwei/xfetch)
 
-*Three backends · Auto fallback · Works everywhere (VPS / Mac / Windows / CI / Claude Code / OpenClaw)*
+*Portable bundles · Clean publish repo split · Works locally and in agent-driven save flows*
 
 [Quick Start](#-quick-start) · [Backends](#-three-backends) · [Capabilities](#-capabilities) · [Self-hosted Nitter](#-self-hosted-nitter-setup) · [Claude Code & CC](#-works-with-claude-code--cc)
 
 </div>
 
 ---
+
+> Note: this project previously lived under legacy names (`x-reader` / `x-tweet-fetcher`). The current runtime and intended identity is `xfetch`.
 
 ## 😤 Problem
 
