@@ -34,6 +34,48 @@ def _normalize_created_at(value: str | None) -> str | None:
     return None
 
 
+def _normalize_entity_map(entity_map: object) -> dict[str, dict]:
+    if isinstance(entity_map, dict):
+        return {str(key): value for key, value in entity_map.items() if isinstance(value, dict)}
+    if isinstance(entity_map, list):
+        normalized: dict[str, dict] = {}
+        for entry in entity_map:
+            if not isinstance(entry, dict):
+                continue
+            key = entry.get("key")
+            value = entry.get("value")
+            if key is None or not isinstance(value, dict):
+                continue
+            normalized[str(key)] = value
+        return normalized
+    return {}
+
+
+
+def _extract_block_text(block: dict, entity_map: dict[str, dict]) -> str:
+    text = str(block.get("text") or "")
+    normalized_text = " ".join(text.split()).strip()
+    entity_ranges = block.get("entityRanges") or []
+
+    markdown_parts: list[str] = []
+    for entity_range in entity_ranges:
+        if not isinstance(entity_range, dict):
+            continue
+        entity = entity_map.get(str(entity_range.get("key"))) or {}
+        if entity.get("type") != "MARKDOWN":
+            continue
+        markdown = ((entity.get("data") or {}).get("markdown") or "").strip()
+        if markdown:
+            markdown_parts.append(markdown)
+
+    parts: list[str] = []
+    if normalized_text:
+        parts.append(normalized_text)
+    parts.extend(markdown_parts)
+    return "\n\n".join(parts)
+
+
+
 def _extract_article_text(article: dict | None) -> str:
     if not article:
         return ""
@@ -47,8 +89,11 @@ def _extract_article_text(article: dict | None) -> str:
         parts.append(preview_text)
 
     content = article.get("content") or {}
+    entity_map = _normalize_entity_map(content.get("entityMap"))
     for block in content.get("blocks") or []:
-        text = " ".join(str(block.get("text") or "").split())
+        if not isinstance(block, dict):
+            continue
+        text = _extract_block_text(block, entity_map)
         if text:
             parts.append(text)
 
