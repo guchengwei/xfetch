@@ -104,7 +104,8 @@ def render_bundle_page(bundle_dir: Path, site_root: Path, public_url: str | None
         rendered_body = _render_markdown_body(markdown_source)
     else:
         body_source = document.get("text") or ""
-        rendered_body = f"<div>{html.escape(body_source).replace(chr(10), '<br>\n')}</div>"
+        escaped_body = html.escape(body_source).replace("\n", "<br>\n")
+        rendered_body = f"<div>{escaped_body}</div>"
     _copy_site_assets(bundle_dir, page_path.parent)
     canonical_tag = f'<link rel="canonical" href="{html.escape(public_url)}">\n' if public_url else ""
 
