@@ -98,6 +98,24 @@ def test_build_parser_exposes_publish_command():
 
 
 
+def test_build_parser_exposes_save_command():
+    parser = build_parser()
+    args = parser.parse_args([
+        "save",
+        "https://x.com/a/status/1",
+        "--target-repo",
+        "../target",
+        "--repo-owner",
+        "guchengwei",
+        "--repo-name",
+        "link-vault",
+    ])
+    assert args.command == "save"
+    assert args.url == "https://x.com/a/status/1"
+    assert args.target_repo == "../target"
+
+
+
 def test_load_config_prefers_explicit_content_root(tmp_path, monkeypatch):
     monkeypatch.setenv("XFETCH_CONTENT_ROOT", "/tmp/wrong")
     cfg = load_config(content_root=tmp_path)
@@ -205,3 +223,85 @@ def test_cli_publish_returns_nonzero_for_non_git_target_repo(tmp_path):
         "link-vault",
     ])
     assert rc != 0
+
+
+
+def test_cli_save_writes_bundle_without_publish_target(tmp_path, monkeypatch, capsys):
+    doc = NormalizedDocument(
+        source_type="x",
+        source_url="https://x.com/alice/status/123",
+        canonical_url="https://x.com/alice/status/123",
+        external_id="123",
+        title="hello",
+        author="alice",
+        author_handle="alice",
+        created_at="2026-03-31T00:00:00Z",
+        language=None,
+        text="hello",
+        markdown="# hello",
+        summary=None,
+    )
+
+    class FakeConnector:
+        def fetch(self, url):
+            return doc
+
+    monkeypatch.setattr("xfetch.cli.pick_connector", lambda url: FakeConnector())
+
+    rc = main(["save", "https://x.com/alice/status/123", "--content-root", str(tmp_path), "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["title"] == "hello"
+    assert payload["bundle_dir"]
+    assert payload["published"] is False
+    assert payload["publish_status"] == "not_configured"
+    assert Path(payload["bundle_dir"]).exists()
+
+
+
+def test_cli_save_publishes_when_target_repo_configured(tmp_path, monkeypatch, capsys):
+    doc = NormalizedDocument(
+        source_type="x",
+        source_url="https://x.com/alice/status/123",
+        canonical_url="https://x.com/alice/status/123",
+        external_id="123",
+        title="hello",
+        author="alice",
+        author_handle="alice",
+        created_at="2026-03-31T00:00:00Z",
+        language=None,
+        text="hello",
+        markdown="# hello",
+        summary=None,
+    )
+
+    class FakeConnector:
+        def fetch(self, url):
+            return doc
+
+    target_repo = _init_target_repo(tmp_path)
+    monkeypatch.setattr("xfetch.cli.pick_connector", lambda url: FakeConnector())
+
+    rc = main([
+        "save",
+        "https://x.com/alice/status/123",
+        "--content-root",
+        str(tmp_path / "content-out"),
+        "--target-repo",
+        str(target_repo),
+        "--repo-owner",
+        "guchengwei",
+        "--repo-name",
+        "link-vault",
+        "--json",
+    ])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["published"] is True
+    assert payload["publish_status"] == "published"
+    assert payload["public_url"] == "https://guchengwei.github.io/link-vault/d/x-123-alice/"
+    assert payload["revision"]

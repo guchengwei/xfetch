@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from .config import PublishTargetConfig, load_config
@@ -41,6 +42,17 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--content-subdir", default="content")
     publish.add_argument("--site-subdir", default="site")
     publish.add_argument("--json", action="store_true")
+
+    save = subparsers.add_parser("save")
+    save.add_argument("url")
+    save.add_argument("--content-root")
+    save.add_argument("--target-repo")
+    save.add_argument("--repo-owner")
+    save.add_argument("--repo-name")
+    save.add_argument("--branch", default="main")
+    save.add_argument("--content-subdir", default="content")
+    save.add_argument("--site-subdir", default="site")
+    save.add_argument("--json", action="store_true")
 
     return parser
 
@@ -90,6 +102,28 @@ def _mark_publish_metadata(bundle_dir: Path, target_bundle_dir: Path, public_url
         if revision is not None:
             payload["revision"] = revision
         _write_publish_json(publish_path, payload)
+
+
+def _resolve_optional_publish_target(args) -> tuple[Path | None, PublishTargetConfig | None]:
+    target_repo = getattr(args, "target_repo", None) or os.environ.get("XFETCH_TARGET_REPO")
+    repo_owner = getattr(args, "repo_owner", None) or os.environ.get("XFETCH_REPO_OWNER")
+    repo_name = getattr(args, "repo_name", None) or os.environ.get("XFETCH_REPO_NAME")
+    branch = getattr(args, "branch", None) or os.environ.get("XFETCH_BRANCH") or "main"
+    content_subdir = getattr(args, "content_subdir", None) or os.environ.get("XFETCH_CONTENT_SUBDIR") or "content"
+    site_subdir = getattr(args, "site_subdir", None) or os.environ.get("XFETCH_SITE_SUBDIR") or "site"
+
+    values = [target_repo, repo_owner, repo_name]
+    if not any(values):
+        return None, None
+    if not all(values):
+        raise ValueError("Incomplete publish target configuration. Set target repo, repo owner, and repo name.")
+    return Path(target_repo), PublishTargetConfig(
+        repo_owner=repo_owner,
+        repo_name=repo_name,
+        branch=branch,
+        content_subdir=content_subdir,
+        site_subdir=site_subdir,
+    )
 
 
 def run_ingest(args) -> int:
@@ -171,6 +205,58 @@ def run_publish(args) -> int:
     return 0
 
 
+def run_save(args) -> int:
+    config = load_config(content_root=args.content_root)
+    connector = pick_connector(args.url)
+    if connector is None:
+        return 2
+
+    doc = connector.fetch(args.url)
+    bundle_dir = write_bundle(doc, config)
+    result = {
+        "ok": True,
+        "url": doc.canonical_url or doc.source_url,
+        "title": doc.title,
+        "source_type": doc.source_type,
+        "bundle_dir": str(bundle_dir),
+        "published": False,
+        "publish_status": "not_configured",
+        "public_url": None,
+        "revision": None,
+    }
+
+    try:
+        target_repo, publish_target = _resolve_optional_publish_target(args)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+
+    if target_repo and publish_target:
+        if not (target_repo / ".git").exists():
+            return 4
+        sync_result, public_url = _render_and_sync(bundle_dir, target_repo, publish_target)
+        _mark_publish_metadata(bundle_dir, sync_result.bundle_destination_dir, public_url, revision=None, published=True)
+        revision = publish_repo(target_repo=target_repo, branch=publish_target.branch, commit_message=f"publish: {bundle_dir.name}")
+        source_publish = _load_publish_json(bundle_dir / "publish.json")
+        source_publish["revision"] = revision
+        _write_publish_json(bundle_dir / "publish.json", source_publish)
+        result.update(
+            published=True,
+            publish_status="published",
+            public_url=public_url,
+            revision=revision,
+        )
+
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        if result["published"]:
+            print(result["public_url"])
+        else:
+            print(result["bundle_dir"])
+    return 0
+
+
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -180,4 +266,6 @@ def main(argv=None) -> int:
         return run_sync(args)
     if args.command == "publish":
         return run_publish(args)
+    if args.command == "save":
+        return run_save(args)
     return 0
