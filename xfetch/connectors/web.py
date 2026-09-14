@@ -7,6 +7,7 @@ from html.parser import HTMLParser
 import re
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request
+from urllib.error import HTTPError
 
 from xfetch.connectors.base import BaseConnector
 from xfetch.connectors.x import is_x_url
@@ -141,7 +142,22 @@ class WebConnector(BaseConnector):
         return True
 
     def fetch(self, url: str) -> NormalizedDocument:
-        html, fetched_url, content_type = _fetch_url(url)
+        try:
+            html, fetched_url, content_type = _fetch_url(url)
+        except HTTPError as exc:
+            parsed = urlparse(url)
+            match = re.fullmatch(r"/(@[A-Za-z0-9_.-]+)/[^/]+-([a-f0-9]{12})/?", parsed.path)
+            if exc.code != 403 or parsed.hostname not in {"medium.com", "www.medium.com"} or not match:
+                raise
+            from xfetch.connectors.rss import RSSConnector
+            feed_url = f"https://medium.com/feed/{match[1]}"
+            doc = RSSConnector().fetch(feed_url, entry_id=f"https://medium.com/p/{match[2]}")
+            doc.source_url = url
+            doc.metadata.update({"fallback": "medium_rss", "feed_url": feed_url,
+                                 "capture_limitation": "Captured public RSS content; completeness against the blocked article page is unverified."})
+            if doc.capture_status == "complete":
+                doc.capture_status = "partial"
+            return doc
         parser = _HTMLDocumentParser()
         parser.feed(html)
         parser.close()

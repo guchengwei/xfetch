@@ -54,6 +54,8 @@ The installed skill's default local operation is equivalent to:
 
 Each local capture is a bundle containing `document.json`, `index.md`, `publish.json`, and `assets/`. A successful publication adds `publication.json`. `document.json` records whether the capture is `complete`, `partial`, or `metadata_only`; the agent should report that status and any recorded limitation instead of presenting a partial capture as complete. A command failure exits non-zero and is not a successful capture.
 
+Unicode characters in URL paths and queries are encoded before fetching. When a Medium author article URL (`medium.com/@author/title-<post-id>`) returns HTTP 403, xfetch tries the author's public RSS feed and selects the exact post ID. RSS `content:encoded` bodies and their image assets are captured. This fallback is `partial`: the feed body cannot be checked against the blocked article page. If the requested post is absent from the feed, capture fails instead of saving the latest unrelated entry. Title-only feeds are `metadata_only`.
+
 If installation stops because an existing destination is modified or conflicts with the requested revision, preserve that installation, inspect the skill's `INSTALLATION.md` or the runtime's `.xfetch-runtime`, and resolve the conflict before retrying. To remove an installation, first verify each skill path against its `INSTALLATION.md`, the runtime against `.xfetch-runtime`, and every path against the installer-managed marker (`.xfetch-managed` containing `xfetch-installer-managed-v1`). Confirm that the copies contain no user files, then remove only the verified runtime and skill paths:
 
 ```bash

@@ -4,7 +4,7 @@ from datetime import timezone
 from email.utils import parsedate_to_datetime
 from hashlib import sha1
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request
 import xml.etree.ElementTree as ET
 
@@ -82,13 +82,19 @@ class RSSConnector(BaseConnector):
             lowered.endswith(".xml") or "/feed" in lowered or "/rss" in lowered or "/atom" in lowered
         )
 
-    def fetch(self, url: str) -> NormalizedDocument:
+    def fetch(self, url: str, *, entry_id: str | None = None) -> NormalizedDocument:
         root, source_url, content_type = _fetch_feed(url)
         feed_title, entries = _find_entries(root)
         if not entries:
             raise ValueError(f"No RSS/Atom entries found for {url}")
 
         entry = entries[0]
+        if entry_id is not None:
+            entry = next((item for item in entries
+                          if _first_child_text(item, "guid", "id") == entry_id
+                          or _extract_link(item) == entry_id), None)
+            if entry is None:
+                raise ValueError(f"Requested entry {entry_id} not found in feed {url}")
         title = _first_child_text(entry, "title") or "Untitled feed entry"
         canonical_url = _extract_link(entry) or source_url
         guid = _first_child_text(entry, "guid", "id")
@@ -96,10 +102,27 @@ class RSSConnector(BaseConnector):
         raw_author = _first_child_text(entry, "author", "creator", "name")
         author = raw_author.split("(")[-1].rstrip(")").strip() if raw_author and "(" in raw_author else (raw_author or (feed_title or urlparse(canonical_url).netloc.lower() or "unknown"))
         author_handle = urlparse(canonical_url).netloc.lower() or "unknown"
-        content = _first_child_text(entry, "content")
-        text = content or _first_child_text(entry, "description", "summary") or title
+        content = _first_child_text(entry, "encoded") or _first_child_text(entry, "content")
+        body = content or _first_child_text(entry, "description", "summary")
+        text = body or title
+        assets = []
+        if content and _first_child_text(entry, "encoded"):
+            # Reuse web extraction for RSS HTML, including durable image assets.
+            from xfetch.connectors.web import _HTMLDocumentParser
+            parser = _HTMLDocumentParser()
+            parser.feed(f"<article>{content}</article>")
+            parser.close()
+            text = parser.text_content() or title
+            for image in parser.images:
+                image_url = urljoin(canonical_url, image["url"])
+                if urlparse(image_url).hostname == "medium.com" and urlparse(image_url).path == "/_/stat":
+                    continue
+                if image_url.startswith(("http://", "https://")):
+                    assets.append({**image, "url": image_url})
         created_at = _normalize_created_at(_first_child_text(entry, "pubdate", "published", "updated"))
         markdown = f"# {title}\n\n- Source: {canonical_url}\n- Feed: {feed_title or source_url}\n- Author: {author}\n\n{text}\n"
+        for asset in assets:
+            markdown += f"\n![Article image]({asset['url']})\n"
 
         return NormalizedDocument(
             source_type="rss",
@@ -114,8 +137,9 @@ class RSSConnector(BaseConnector):
             text=text,
             markdown=markdown,
             summary=None,
+            assets=assets,
             metadata={"platform": "rss", "feed_title": feed_title, "content_type": content_type},
             lineage={"connector": "rss", "runtime_version": "0.2.0"},
-            capture_status="complete" if content else "partial",
-            content_kinds=["text", "metadata"],
+            capture_status="complete" if content else ("partial" if body else "metadata_only"),
+            content_kinds=(["text", "metadata"] if body else ["metadata"]) + (["images"] if assets else []),
         )

@@ -20,3 +20,29 @@ def test_validate_public_url_blocks_link_local_metadata(monkeypatch):
 def test_validate_public_url_accepts_public_address(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
     assert validate_public_url("https://example.com/article") == "https://example.com/article"
+
+
+@pytest.mark.parametrize('as_request', [False, True])
+def test_safe_urlopen_encodes_unicode_without_double_encoding(monkeypatch, as_request):
+    from urllib.request import Request
+    from xfetch.net import safe_urlopen
+    url = 'https://example.com/工作流/%E4%B8%AD?q=測試&keep=a%2Fb'
+    expected = 'https://example.com/%E5%B7%A5%E4%BD%9C%E6%B5%81/%E4%B8%AD?q=%E6%B8%AC%E8%A9%A6&keep=a%2Fb'
+    checked = []
+    monkeypatch.setattr('xfetch.net.validate_public_url', lambda value: checked.append(value))
+    class Response:
+        def geturl(self): return expected
+    class Opener:
+        def open(self, value, timeout):
+            assert (value.full_url if as_request else value) == expected
+            if as_request:
+                assert value.get_header('User-agent') == 'test-agent'
+                assert value.data == b'body'
+                assert value.get_method() == 'POST'
+            return Response()
+    monkeypatch.setattr('xfetch.net.build_opener', lambda *args: Opener())
+    request = Request(url, data=b'body', headers={'User-Agent': 'test-agent'}) if as_request else url
+    safe_urlopen(request)
+    assert checked == [url, expected]
+    if as_request:
+        assert request.full_url == url

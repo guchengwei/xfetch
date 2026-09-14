@@ -62,3 +62,33 @@ def test_rss_connector_matches_feed_urls_only():
     assert connector.can_handle("https://example.com/feed.xml") is True
     assert connector.can_handle("https://example.com/feed") is True
     assert connector.can_handle("https://example.com/posts/1") is False
+
+
+def test_encoded_body_exact_entry_and_image(monkeypatch):
+    rss = '''<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel>
+    <item><title>Wrong latest article</title><guid>other</guid></item>
+    <item><title>Requested</title><guid>target</guid><link>https://medium.com/@author/article</link>
+    <description>Short teaser</description><content:encoded><![CDATA[<p>Full body 中文</p>
+    <img src="https://cdn.example.com/diagram.png"/>
+    <img src="https://medium.com/_/stat?event=post.clientViewed"/>]]></content:encoded></item>
+    </channel></rss>'''
+    monkeypatch.setattr('xfetch.connectors.rss.urlopen', lambda *args, **kwargs: FakeResponse(rss, 'https://medium.com/feed/@author'))
+    doc = RSSConnector().fetch('https://medium.com/feed/@author', entry_id='target')
+    assert doc.title == 'Requested'
+    assert doc.text == 'Full body 中文'
+    assert 'Short teaser' not in doc.markdown
+    assert doc.capture_status == 'complete'
+    assert doc.content_kinds == ['text', 'metadata', 'images']
+    assert len(doc.assets) == 1
+    assert 'https://cdn.example.com/diagram.png' in doc.markdown
+    import pytest
+    with pytest.raises(ValueError, match='not found'):
+        RSSConnector().fetch('https://medium.com/feed/@author', entry_id='missing')
+
+
+def test_title_only_is_metadata_only(monkeypatch):
+    rss = '<rss><channel><item><title>Only title</title></item></channel></rss>'
+    monkeypatch.setattr('xfetch.connectors.rss.urlopen', lambda *args, **kwargs: FakeResponse(rss, 'https://example.com/feed'))
+    doc = RSSConnector().fetch('https://example.com/feed')
+    assert doc.capture_status == 'metadata_only'
+    assert doc.content_kinds == ['metadata']

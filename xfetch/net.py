@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import copy
 import ipaddress
 import socket
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _encode_url(url: str) -> str:
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc,
+                      quote(parts.path, safe="/%:@!$&'()*+,;=-._~"),
+                      quote(parts.query, safe="%/?@:!$&'()*+,;=-._~"),
+                      parts.fragment))
 
 
 def validate_public_url(url: str) -> str:
@@ -37,6 +46,7 @@ def validate_public_url(url: str) -> str:
 
 class _SafeRedirectHandler(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        newurl = _encode_url(newurl)
         validate_public_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
@@ -78,6 +88,12 @@ def safe_urlopen(request_or_url, timeout: int = 10, max_bytes: int = DEFAULT_MAX
     else:
         url = str(request_or_url)
     validate_public_url(url)
+    encoded_url = _encode_url(url)
+    if isinstance(request_or_url, Request):
+        request_or_url = copy(request_or_url)
+        request_or_url.full_url = encoded_url
+    else:
+        request_or_url = encoded_url
     opener = build_opener(_SafeRedirectHandler())
     response = opener.open(request_or_url, timeout=timeout)
     final_url = response.geturl()

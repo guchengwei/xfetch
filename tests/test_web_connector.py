@@ -106,3 +106,41 @@ def test_web_connector_matches_generic_http_urls_but_not_x_or_rss():
     assert connector.can_handle("https://example.com/posts/123") is True
     assert connector.can_handle("https://x.com/alice/status/123") is False
     assert connector.can_handle("https://example.com/feed.xml") is False
+
+
+def test_medium_403_uses_matching_feed_article(monkeypatch):
+    from urllib.error import HTTPError
+    url = 'https://medium.com/@author/工作流-f9a378cea385'
+    def blocked(*args): raise HTTPError(url, 403, 'Forbidden', {}, None)
+    monkeypatch.setattr('xfetch.connectors.web._fetch_url', blocked)
+    rss = '''<rss xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel>
+    <item><title>Other</title><guid>other</guid></item>
+    <item><title>Target</title><guid>https://medium.com/p/f9a378cea385</guid>
+    <link>https://medium.com/@author/article-f9a378cea385</link>
+    <content:encoded><![CDATA[<p>Full body</p>]]></content:encoded></item>
+    </channel></rss>'''
+    def feed(request, **kwargs):
+        assert request.full_url == 'https://medium.com/feed/@author'
+        return FakeResponse(rss, request.full_url, 'application/rss+xml')
+    monkeypatch.setattr('xfetch.connectors.rss.urlopen', feed)
+    doc = WebConnector().fetch(url)
+    assert doc.title == 'Target'
+    assert doc.text == 'Full body'
+    assert doc.source_url == url
+    assert doc.capture_status == 'partial'
+    assert doc.metadata['fallback'] == 'medium_rss'
+    import pytest
+    with pytest.raises(ValueError, match='not found'):
+        WebConnector().fetch(url.replace('f9a378cea385', 'aaaaaaaaaaaa'))
+
+
+def test_non_medium_and_non_403_errors_do_not_use_feed(monkeypatch):
+    from urllib.error import HTTPError
+    import pytest
+    for url, code in [('https://example.com/@author/article-f9a378cea385', 403),
+                      ('https://medium.com.evil.test/@author/article-f9a378cea385', 403),
+                      ('https://medium.com/@author/article-f9a378cea385', 404)]:
+        def blocked(*args): raise HTTPError(url, code, 'Blocked', {}, None)
+        monkeypatch.setattr('xfetch.connectors.web._fetch_url', blocked)
+        with pytest.raises(HTTPError):
+            WebConnector().fetch(url)
