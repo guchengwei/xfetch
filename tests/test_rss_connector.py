@@ -92,3 +92,30 @@ def test_title_only_is_metadata_only(monkeypatch):
     doc = RSSConnector().fetch('https://example.com/feed')
     assert doc.capture_status == 'metadata_only'
     assert doc.content_kinds == ['metadata']
+
+
+def test_rss_html_preserves_structure_and_image_position():
+    from xfetch.connectors.rss_html import RSSHTMLParser
+    parser = RSSHTMLParser('https://example.com/article')
+    parser.feed('<p>Intro 中文。</p><figure><img alt="Diagram" src="/diagram.png">'
+                '<figcaption>Caption</figcaption></figure><h3>Step 0</h3>'
+                '<p>First paragraph.</p><ol><li>First</li><li>Second</li></ol>'
+                '<p>After list.</p><h4>Notes</h4><p><strong>Bold</strong> and '
+                '<code>git diff</code> with <a href="/more?a=1&amp;b=2">link</a>.</p>'
+                '<script>do not capture</script>')
+    md = parser.markdown()
+    assert 'Intro 中文。\n\n![Diagram](https://example.com/diagram.png)\n\nCaption\n\n### Step 0' in md
+    assert '1. First\n2. Second\n\nAfter list.' in md
+    assert '#### Notes' in md
+    assert '**Bold** and `git diff`' in md
+    assert '[link](https://example.com/more?a=1&b=2)' in md
+    assert 'do not capture' not in md
+    assert len(parser.assets) == 1
+
+
+def test_rss_emphasis_wrapping_blocks_does_not_break_markdown():
+    from xfetch.connectors.rss_html import RSSHTMLParser
+    parser = RSSHTMLParser('https://example.com')
+    parser.feed('<p>Legend:<strong><br></strong>Blue</p>'
+                '<em><strong>Test lock<p>First.</p><p>Second.</p></strong></em>')
+    assert parser.markdown() == 'Legend:\n\nBlue\n\nTest lock\n\nFirst.\n\nSecond.'

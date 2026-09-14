@@ -4,7 +4,7 @@ from datetime import timezone
 from email.utils import parsedate_to_datetime
 from hashlib import sha1
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request
 import xml.etree.ElementTree as ET
 
@@ -102,27 +102,26 @@ class RSSConnector(BaseConnector):
         raw_author = _first_child_text(entry, "author", "creator", "name")
         author = raw_author.split("(")[-1].rstrip(")").strip() if raw_author and "(" in raw_author else (raw_author or (feed_title or urlparse(canonical_url).netloc.lower() or "unknown"))
         author_handle = urlparse(canonical_url).netloc.lower() or "unknown"
-        content = _first_child_text(entry, "encoded") or _first_child_text(entry, "content")
+        encoded = _first_child_text(entry, "encoded")
+        content = encoded or _first_child_text(entry, "content")
         body = content or _first_child_text(entry, "description", "summary")
         text = body or title
+        markdown_body = text
         assets = []
-        if content and _first_child_text(entry, "encoded"):
-            # Reuse web extraction for RSS HTML, including durable image assets.
+        if encoded:
+            from xfetch.connectors.rss_html import RSSHTMLParser
             from xfetch.connectors.web import _HTMLDocumentParser
-            parser = _HTMLDocumentParser()
-            parser.feed(f"<article>{content}</article>")
+            parser = RSSHTMLParser(canonical_url)
+            parser.feed(encoded)
             parser.close()
-            text = parser.text_content() or title
-            for image in parser.images:
-                image_url = urljoin(canonical_url, image["url"])
-                if urlparse(image_url).hostname == "medium.com" and urlparse(image_url).path == "/_/stat":
-                    continue
-                if image_url.startswith(("http://", "https://")):
-                    assets.append({**image, "url": image_url})
+            markdown_body = parser.markdown()
+            assets = parser.assets
+            plain = _HTMLDocumentParser()
+            plain.feed(f"<article>{encoded}</article>")
+            plain.close()
+            text = plain.text_content() or title
         created_at = _normalize_created_at(_first_child_text(entry, "pubdate", "published", "updated"))
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Feed: {feed_title or source_url}\n- Author: {author}\n\n{text}\n"
-        for asset in assets:
-            markdown += f"\n![Article image]({asset['url']})\n"
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Feed: {feed_title or source_url}\n- Author: {author}\n\n{markdown_body}\n"
 
         return NormalizedDocument(
             source_type="rss",
