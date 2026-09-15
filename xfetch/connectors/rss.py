@@ -82,13 +82,19 @@ class RSSConnector(BaseConnector):
             lowered.endswith(".xml") or "/feed" in lowered or "/rss" in lowered or "/atom" in lowered
         )
 
-    def fetch(self, url: str) -> NormalizedDocument:
+    def fetch(self, url: str, *, entry_id: str | None = None) -> NormalizedDocument:
         root, source_url, content_type = _fetch_feed(url)
         feed_title, entries = _find_entries(root)
         if not entries:
             raise ValueError(f"No RSS/Atom entries found for {url}")
 
         entry = entries[0]
+        if entry_id is not None:
+            entry = next((item for item in entries
+                          if _first_child_text(item, "guid", "id") == entry_id
+                          or _extract_link(item) == entry_id), None)
+            if entry is None:
+                raise ValueError(f"Requested entry {entry_id} not found in feed {url}")
         title = _first_child_text(entry, "title") or "Untitled feed entry"
         canonical_url = _extract_link(entry) or source_url
         guid = _first_child_text(entry, "guid", "id")
@@ -96,10 +102,26 @@ class RSSConnector(BaseConnector):
         raw_author = _first_child_text(entry, "author", "creator", "name")
         author = raw_author.split("(")[-1].rstrip(")").strip() if raw_author and "(" in raw_author else (raw_author or (feed_title or urlparse(canonical_url).netloc.lower() or "unknown"))
         author_handle = urlparse(canonical_url).netloc.lower() or "unknown"
-        content = _first_child_text(entry, "content")
-        text = content or _first_child_text(entry, "description", "summary") or title
+        encoded = _first_child_text(entry, "encoded")
+        content = encoded or _first_child_text(entry, "content")
+        body = content or _first_child_text(entry, "description", "summary")
+        text = body or title
+        markdown_body = text
+        assets = []
+        if encoded:
+            from xfetch.connectors.rss_html import RSSHTMLParser
+            from xfetch.connectors.web import _HTMLDocumentParser
+            parser = RSSHTMLParser(canonical_url)
+            parser.feed(encoded)
+            parser.close()
+            markdown_body = parser.markdown()
+            assets = parser.assets
+            plain = _HTMLDocumentParser()
+            plain.feed(f"<article>{encoded}</article>")
+            plain.close()
+            text = plain.text_content() or title
         created_at = _normalize_created_at(_first_child_text(entry, "pubdate", "published", "updated"))
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Feed: {feed_title or source_url}\n- Author: {author}\n\n{text}\n"
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Feed: {feed_title or source_url}\n- Author: {author}\n\n{markdown_body}\n"
 
         return NormalizedDocument(
             source_type="rss",
@@ -114,8 +136,9 @@ class RSSConnector(BaseConnector):
             text=text,
             markdown=markdown,
             summary=None,
+            assets=assets,
             metadata={"platform": "rss", "feed_title": feed_title, "content_type": content_type},
             lineage={"connector": "rss", "runtime_version": "0.2.0"},
-            capture_status="complete" if content else "partial",
-            content_kinds=["text", "metadata"],
+            capture_status="complete" if content else ("partial" if body else "metadata_only"),
+            content_kinds=(["text", "metadata"] if body else ["metadata"]) + (["images"] if assets else []),
         )
