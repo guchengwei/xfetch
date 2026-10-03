@@ -22,6 +22,26 @@ def test_validate_public_url_accepts_public_address(monkeypatch):
     assert validate_public_url("https://example.com/article") == "https://example.com/article"
 
 
+def test_validate_public_url_accepts_egress_fake_ip(monkeypatch):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("198.18.0.1", 443))],
+    )
+    url = "https://vocus.cc/article/676cfc02fd89780001bbaaa4"
+    assert validate_public_url(url) == url
+
+
+def test_validate_public_url_blocks_rfc1918_private(monkeypatch):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 443))],
+    )
+    with pytest.raises(ValueError, match="non-public"):
+        validate_public_url("https://example.test/internal")
+
+
 @pytest.mark.parametrize('as_request', [False, True])
 def test_safe_urlopen_encodes_unicode_without_double_encoding(monkeypatch, as_request):
     from urllib.request import Request

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 - 2026-10-03
+
+- allow egress proxy fake-ip range `198.18.0.0/15` in `validate_public_url` while still refusing localhost, real private, link-local, and metadata addresses
+
 ## 0.2.0 - 2026-08-29
 
 - add public-network validation for source fetches, redirects, and asset downloads

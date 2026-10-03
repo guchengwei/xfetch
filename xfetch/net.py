@@ -10,6 +10,15 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 
+# Some egress proxies (e.g. Clash fake-ip) resolve public hostnames to this range.
+_EGRESS_FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _is_acceptable_public_resolution(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if ip.is_global:
+        return True
+    return ip in _EGRESS_FAKE_IP_NETWORK
+
 
 def _encode_url(url: str) -> str:
     parts = urlsplit(url)
@@ -39,7 +48,7 @@ def validate_public_url(url: str) -> str:
         raise ValueError(f"cannot resolve hostname: {hostname}")
     for _family, _type, _proto, _canonname, sockaddr in resolved:
         ip = ipaddress.ip_address(sockaddr[0])
-        if not ip.is_global:
+        if not _is_acceptable_public_resolution(ip):
             raise ValueError(f"refusing non-public address for {hostname}: {ip}")
     return url
 

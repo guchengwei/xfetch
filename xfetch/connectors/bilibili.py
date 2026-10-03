@@ -159,7 +159,7 @@ class BilibiliConnector(BaseConnector):
             summary=None,
             assets=assets,
             metadata=metadata,
-            lineage={"connector": "bilibili", "runtime_version": "0.2.0"},
+            lineage={"connector": "bilibili", "runtime_version": "0.2.1"},
             capture_status=capture_status,
             content_kinds=content_kinds,
         )
