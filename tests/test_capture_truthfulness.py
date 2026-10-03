@@ -44,6 +44,7 @@ def test_xiaohongshu_video_note_is_partial(monkeypatch):
     doc = XiaohongshuConnector().fetch("https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2")
     assert doc.capture_status == "partial"
     assert doc.metadata["unpreserved_media"] == ["video"]
+    assert "![](https://sns-webpic-qc.xhscdn.com/cover.jpg)" in doc.markdown
 
 
 def test_wechat_verification_page_fails_even_with_body_text(monkeypatch):

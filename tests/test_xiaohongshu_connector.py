@@ -71,10 +71,45 @@ def test_xiaohongshu_connector_extracts_note_from_initial_state(monkeypatch):
     assert doc.author_handle == "alice-xhs"
     assert doc.created_at == "2024-04-01T08:00:00Z"
     assert "Line one" in doc.text
+    assert "Line one\n\nLine two\n\n![](https://sns-webpic-qc.xhscdn.com/img-1.jpg)" in doc.markdown
+    assert doc.markdown.index("Line two") < doc.markdown.index("img-1.jpg")
+    assert doc.capture_status == "complete"
     assert doc.tags == ["AI", "Agents"]
     assert doc.assets == [{"url": "https://sns-webpic-qc.xhscdn.com/img-1.jpg", "type": "image"}]
     assert doc.metadata["note_type"] == "image"
     assert doc.metadata["stats"]["likes"] == 12
+
+
+def test_xiaohongshu_html_caption_keeps_image_position_and_gallery_order(monkeypatch):
+    html = """
+    <html><head><script>
+      window.__INITIAL_STATE__ = {
+        "note": {"noteDetailMap": {"67b8e3f5000000000b00d8e2": {"note": {
+          "title": "Structured note",
+          "desc": "<p>Before.</p><img alt=\\"Shot\\" src=\\"https://cdn.example.com/inline.jpg\\"><h2>Next</h2><p>After.</p>",
+          "type": "normal",
+          "user": {"nickname": "Alice XHS"},
+          "imageList": [
+            {"urlDefault": "https://cdn.example.com/inline.jpg"},
+            {"urlDefault": "https://cdn.example.com/extra.jpg"}
+          ]
+        }}}}
+      };
+    </script></head></html>
+    """
+    monkeypatch.setattr(
+        "xfetch.connectors.xiaohongshu.urlopen",
+        lambda request, timeout=15: FakeResponse(html, "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"),
+    )
+    doc = XiaohongshuConnector().fetch("https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2")
+    assert "Before.\n\n![Shot](https://cdn.example.com/inline.jpg)\n\n## Next\n\nAfter." in doc.markdown
+    assert doc.markdown.index("Before.") < doc.markdown.index("inline.jpg") < doc.markdown.index("## Next") < doc.markdown.index("After.")
+    assert doc.markdown.index("After.") < doc.markdown.index("extra.jpg")
+    assert [asset["url"] for asset in doc.assets] == [
+        "https://cdn.example.com/inline.jpg",
+        "https://cdn.example.com/extra.jpg",
+    ]
+    assert doc.capture_status == "complete"
 
 
 def test_xiaohongshu_connector_matches_site_and_short_urls():

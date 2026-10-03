@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import re
 from urllib.parse import urlparse
 
+from xfetch.article_html import visual_capture_status
 from xfetch.backends.fxtwitter import fetch_fxtwitter_json, fetch_oembed_json, parse_fxtwitter_payload, parse_oembed_payload
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument, derive_title, render_markdown
@@ -78,4 +79,15 @@ class XConnector(BaseConnector):
             content_kinds=["text", "images"] if raw.get("assets") else ["text"],
         )
         doc.markdown = render_markdown(doc, body=raw.get("markdown") or text)
+        image_urls = [
+            str(asset.get("url") or "")
+            for asset in doc.assets
+            if isinstance(asset, dict) and asset.get("url") and asset.get("type", "image") == "image"
+        ]
+        doc.capture_status = visual_capture_status(
+            doc.markdown,
+            image_urls,
+            has_body=bool((text or "").strip() or (doc.markdown or "").strip()),
+            status=doc.capture_status,
+        )
         return doc
