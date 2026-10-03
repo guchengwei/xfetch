@@ -80,18 +80,17 @@ def test_xiaohongshu_connector_extracts_note_from_initial_state(monkeypatch):
     assert doc.metadata["stats"]["likes"] == 12
 
 
-def test_xiaohongshu_html_caption_keeps_image_position_and_gallery_order(monkeypatch):
+def test_xiaohongshu_caption_keeps_literal_markup(monkeypatch):
     html = """
     <html><head><script>
       window.__INITIAL_STATE__ = {
         "note": {"noteDetailMap": {"67b8e3f5000000000b00d8e2": {"note": {
-          "title": "Structured note",
-          "desc": "<p>Before.</p><img alt=\\"Shot\\" src=\\"https://cdn.example.com/inline.jpg\\"><h2>Next</h2><p>After.</p>",
+          "title": "Literal caption",
+          "desc": "Show &lt;b&gt;bold&lt;/b&gt; and &lt;img src=&quot;https://cdn.example.com/evil.jpg&quot;&gt;",
           "type": "normal",
           "user": {"nickname": "Alice XHS"},
           "imageList": [
-            {"urlDefault": "https://cdn.example.com/inline.jpg"},
-            {"urlDefault": "https://cdn.example.com/extra.jpg"}
+            {"urlDefault": "https://cdn.example.com/gallery.jpg"}
           ]
         }}}}
       };
@@ -102,13 +101,13 @@ def test_xiaohongshu_html_caption_keeps_image_position_and_gallery_order(monkeyp
         lambda request, timeout=15: FakeResponse(html, "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"),
     )
     doc = XiaohongshuConnector().fetch("https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2")
-    assert "Before.\n\n![Shot](https://cdn.example.com/inline.jpg)\n\n## Next\n\nAfter." in doc.markdown
-    assert doc.markdown.index("Before.") < doc.markdown.index("inline.jpg") < doc.markdown.index("## Next") < doc.markdown.index("After.")
-    assert doc.markdown.index("After.") < doc.markdown.index("extra.jpg")
-    assert [asset["url"] for asset in doc.assets] == [
-        "https://cdn.example.com/inline.jpg",
-        "https://cdn.example.com/extra.jpg",
-    ]
+    caption = 'Show <b>bold</b> and <img src="https://cdn.example.com/evil.jpg">'
+    assert caption in doc.text
+    assert caption in doc.markdown
+    assert "**bold**" not in doc.markdown
+    assert "![evil" not in doc.markdown
+    assert doc.markdown.index(caption) < doc.markdown.index("gallery.jpg")
+    assert [asset["url"] for asset in doc.assets] == ["https://cdn.example.com/gallery.jpg"]
     assert doc.capture_status == "complete"
 
 

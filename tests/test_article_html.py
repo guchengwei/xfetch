@@ -48,6 +48,96 @@ def test_root_class_ignores_images_outside_the_article():
     assert [asset["url"] for asset in parser.captured_assets()] == ["https://mmbiz.qpic.cn/inside.jpg"]
 
 
+def test_article_local_header_and_aside_stay_in_the_capture():
+    parser = ArticleHTMLParser("https://example.com/post", prefer_main=True)
+    parser.feed(
+        "<nav><p>Menu</p><img src=\"https://cdn.example.com/logo.png\" alt=\"Logo\"></nav>"
+        "<article>"
+        "<header><h1>Headline</h1><img alt=\"Hero\" src=\"/hero.jpg\"></header>"
+        "<aside>Deck note.</aside>"
+        "<p>Body.</p>"
+        "</article>"
+        "<footer><p>Footer</p></footer>"
+    )
+    parser.close()
+    markdown = parser.markdown()
+    assert markdown == "# Headline\n\n![Hero](https://example.com/hero.jpg)\n\nDeck note.\n\nBody."
+    assert "Menu" not in markdown
+    assert "Footer" not in markdown
+    assert "logo.png" not in markdown
+    assert [asset["url"] for asset in parser.captured_assets()] == ["https://example.com/hero.jpg"]
+
+
+def test_header_wrapping_the_article_still_captures_the_article():
+    parser = ArticleHTMLParser("https://example.com/post", prefer_main=True)
+    parser.feed(
+        "<header><p>Site title</p><article><h1>Headline</h1><p>Body.</p></article></header>"
+        "<footer><p>Footer</p></footer>"
+    )
+    parser.close()
+    assert parser.markdown() == "# Headline\n\nBody."
+    assert "Site title" not in parser.markdown()
+    assert "Footer" not in parser.markdown()
+
+
+def test_preformatted_code_keeps_indentation():
+    parser = ArticleHTMLParser("https://example.com/post")
+    parser.feed(
+        "<p>Before.</p>"
+        "<pre><code>def answer():\n    return value\n</code></pre>"
+        "<p>After.</p>"
+    )
+    parser.close()
+    markdown = parser.markdown()
+    assert "```\ndef answer():\n    return value\n```" in markdown
+    assert markdown.index("Before.") < markdown.index("    return value") < markdown.index("After.")
+
+
+def test_linked_image_is_a_standalone_image():
+    parser = ArticleHTMLParser("https://example.com/post")
+    parser.feed(
+        "<p>Before.</p>"
+        '<a href="/full?wx_fmt=jpeg"><img alt="Shot" data-src="/thumb.jpg"></a>'
+        "<p>After.</p>"
+    )
+    parser.close()
+    assert parser.markdown() == "Before.\n\n![Shot](https://example.com/thumb.jpg)\n\nAfter."
+    assert "/full" not in parser.markdown()
+    assert [asset["url"] for asset in parser.captured_assets()] == ["https://example.com/thumb.jpg"]
+
+
+def test_link_text_closes_before_an_image():
+    parser = ArticleHTMLParser("https://example.com/post")
+    parser.feed('<p>See <a href="/docs">Read <img alt="Icon" src="/icon.png"> more</a> please.</p>')
+    parser.close()
+    markdown = parser.markdown()
+    assert "See [Read](https://example.com/docs)" in markdown
+    assert "![Icon](https://example.com/icon.png)" in markdown
+    assert markdown.index("[Read](https://example.com/docs)") < markdown.index("icon.png")
+    assert markdown.count("](") == 2
+
+
+def test_fallback_page_keeps_four_images_and_article_keeps_all():
+    many = "".join(f'<img alt="n{i}" src="/img-{i}.jpg">' for i in range(1, 6))
+    fallback = ArticleHTMLParser("https://example.com/post", prefer_main=True)
+    fallback.feed(f"<body><nav><img src=\"/logo.png\"></nav><p>Intro.</p>{many}</body>")
+    fallback.close()
+    assert [asset["url"] for asset in fallback.captured_assets()] == [
+        f"https://example.com/img-{i}.jpg" for i in range(1, 5)
+    ]
+    assert "img-5.jpg" not in fallback.markdown()
+    assert "logo.png" not in fallback.markdown()
+    assert "Intro." in fallback.markdown()
+
+    article = ArticleHTMLParser("https://example.com/post", prefer_main=True)
+    article.feed(f"<main><p>Body.</p>{many}</main>")
+    article.close()
+    assert [asset["url"] for asset in article.captured_assets()] == [
+        f"https://example.com/img-{i}.jpg" for i in range(1, 6)
+    ]
+    assert "img-5.jpg" in article.markdown()
+
+
 def test_prefer_main_drops_chrome_and_keeps_article_order():
     parser = ArticleHTMLParser("https://example.com/post", prefer_main=True)
     parser.feed(

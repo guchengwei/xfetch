@@ -144,6 +144,36 @@ def test_web_connector_keeps_heading_list_and_image_position(monkeypatch):
     ]
 
 
+def test_web_connector_bounds_fallback_images_and_keeps_article_images(monkeypatch):
+    many = "".join(f'<img alt="n{i}" src="/img-{i}.jpg">' for i in range(1, 6))
+
+    def fetch(html):
+        monkeypatch.setattr(
+            "xfetch.connectors.web.urlopen",
+            lambda request, timeout=10: FakeResponse(html, "https://example.com/posts/123"),
+        )
+        return WebConnector().fetch("https://example.com/posts/123")
+
+    fallback = fetch(f"<html><head><title>Page</title></head><body><p>Intro.</p>{many}</body></html>")
+    assert [asset["url"] for asset in fallback.assets] == [
+        f"https://example.com/img-{i}.jpg" for i in range(1, 5)
+    ]
+    assert "img-5.jpg" not in fallback.markdown
+    assert "Intro." in fallback.markdown
+
+    article = fetch(
+        "<html><head><title>Page</title>"
+        '<meta property="og:image" content="https://cdn.example.com/card.jpg">'
+        f"</head><body><main><p>Body.</p>{many}</main></body></html>"
+    )
+    assert [asset["url"] for asset in article.assets] == [
+        "https://cdn.example.com/card.jpg",
+        *[f"https://example.com/img-{i}.jpg" for i in range(1, 6)],
+    ]
+    assert "img-5.jpg" in article.markdown
+    assert "card.jpg" not in article.markdown
+
+
 def test_web_connector_matches_generic_http_urls_but_not_x_or_rss():
     connector = WebConnector()
     assert connector.can_handle("https://example.com/posts/123") is True

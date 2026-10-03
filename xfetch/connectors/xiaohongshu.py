@@ -7,7 +7,7 @@ import json
 import re
 from urllib.request import Request
 
-from xfetch.article_html import ArticleHTMLParser, visual_capture_status
+from xfetch.article_html import visual_capture_status
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
 from xfetch.net import safe_urlopen as urlopen
@@ -15,39 +15,23 @@ from xfetch.net import safe_urlopen as urlopen
 
 _XHS_URL_RE = re.compile(r"^https?://(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)/", re.IGNORECASE)
 _NOTE_ID_RE = re.compile(r"(?:explore|discovery/item|notes?)/([a-f0-9]{24})", re.IGNORECASE)
-_HTML_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
 
 
-def _note_body(text: str, image_urls: list[str], base_url: str) -> tuple[str, str, list[str]]:
-    """Return plain text, markdown, and image URLs in visual order.
+def _note_body(text: str, image_urls: list[str]) -> tuple[str, str, list[str]]:
+    """Return plain text, markdown, and gallery image URLs.
 
-    Gallery images have no slot inside a plain caption, so they follow the
-    paragraphs in imageList order. Images already placed in HTML stay there.
+    Captions are user text, including text that looks like HTML. Gallery
+    images have no slot in the caption, so they follow the paragraphs in
+    imageList order.
     """
-    body = ""
-    plain = text
-    inline_urls: list[str] = []
-    if _HTML_TAG_RE.search(text or ""):
-        parser = ArticleHTMLParser(base_url)
-        parser.feed(text)
-        parser.close()
-        body = parser.markdown()
-        plain = parser.text() or text
-        inline_urls = [asset["url"] for asset in parser.captured_assets()]
-    if not body:
-        paragraphs = [" ".join(line.split()) for line in (text or "").splitlines()]
-        paragraphs = [line for line in paragraphs if line]
-        body = "\n\n".join(paragraphs)
-        plain = text
+    paragraphs = [" ".join(line.split()) for line in (text or "").splitlines()]
+    paragraphs = [line for line in paragraphs if line]
+    body = "\n\n".join(paragraphs)
     extras = [url for url in image_urls if url and url not in body]
     if extras:
         gallery = "\n\n".join(f"![]({url})" for url in extras)
         body = f"{body}\n\n{gallery}" if body else gallery
-    asset_urls = list(image_urls)
-    for url in inline_urls:
-        if url not in asset_urls:
-            asset_urls.append(url)
-    return plain, body, asset_urls
+    return text or "", body, list(image_urls)
 
 
 def _fetch_html(url: str) -> tuple[str, str, str]:
@@ -140,7 +124,7 @@ class XiaohongshuConnector(BaseConnector):
             image_url = item.get("urlDefault") or item.get("url") or item.get("url_default")
             if image_url and image_url not in image_urls:
                 image_urls.append(image_url)
-        text, markdown_body, image_urls = _note_body(raw_text, image_urls, canonical_url)
+        text, markdown_body, image_urls = _note_body(raw_text, image_urls)
         assets = [{"url": image_url, "type": "image"} for image_url in image_urls]
         tags = [tag.get("name") for tag in (note.get("tagList", note.get("tag_list", [])) or []) if tag.get("name")]
         interact = note.get("interactInfo", note.get("interact_info", {})) or {}

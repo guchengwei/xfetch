@@ -11,6 +11,8 @@ _CHROME_TAGS = {"nav", "header", "footer", "aside"}
 _BLOCK_TAGS = {"p", "div", "section", "article", "main", "figure", "figcaption", "blockquote", "tr", "table"}
 _LIST_TRANSPARENT_TAGS = {"p", "div", "section", "figure", "figcaption"}
 _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+# Generic pages with no article/main used to keep four images. A real article body is not capped.
+_FALLBACK_IMAGE_LIMIT = 4
 _IMAGE_LINE_RE = re.compile(r"^!\[[^\]]*\]\([^)]*\)$")
 _HEADING_RE = re.compile(r"^#{1,6}\s+")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
@@ -122,8 +124,13 @@ class ArticleHTMLParser(HTMLParser):
         self._emphasis: list[tuple[str, list[str], int]] = []
         self._pending_marker = False
 
+    def _outside_chrome(self) -> bool:
+        # Page chrome only. A header or aside inside article/main is article content,
+        # including when a site header wraps the article.
+        return bool(self._chrome) and self._main_depth == 0
+
     def _current(self) -> tuple[list[str], list[dict]] | None:
-        if not self._inside or self._skip or self._chrome:
+        if not self._inside or self._skip or self._outside_chrome():
             return None
         if self.prefer_main and self._main_depth:
             return self._main_parts, self._main_assets
@@ -170,13 +177,13 @@ class ArticleHTMLParser(HTMLParser):
             return
         if self._skip:
             return
-        if self.prefer_main and tag in _CHROME_TAGS:
-            self._chrome += 1
-            return
-        if self._chrome:
-            return
         if self.prefer_main and tag in {"article", "main"}:
             self._main_depth += 1
+        if self.prefer_main and tag in _CHROME_TAGS and self._main_depth == 0:
+            self._chrome += 1
+            return
+        if self._outside_chrome():
+            return
 
         if tag in _BLOCK_TAGS:
             self._append_block(tag, opening=True)
@@ -214,6 +221,47 @@ class ArticleHTMLParser(HTMLParser):
         elif tag == "img":
             self._append_image(attrs)
 
+    def _link_label_end(self, parts: list[str]) -> int | None:
+        """Index just after the open link's label, or None when no link is open."""
+        if not self._links or not self._links[-1]:
+            return None
+        end = len(parts)
+        while end > 0 and not parts[end - 1].strip():
+            end -= 1
+        return end
+
+    def _suppress_image_only_link(self, parts: list[str]) -> None:
+        """Drop an anchor whose only content is this image so it does not become `[](url)`."""
+        end = self._link_label_end(parts)
+        if end is None:
+            return
+        if end > 0 and parts[end - 1] == "[":
+            del parts[end - 1 :]
+            self._links[-1] = None
+
+    def _close_link_before_image(self, parts: list[str]) -> None:
+        """A linked image is not `[` + image block + `](url)`. Close any text link first."""
+        end = self._link_label_end(parts)
+        if end is None:
+            return
+        url = self._links[-1]
+        self._links[-1] = None
+        if end > 0 and parts[end - 1] == "[":
+            del parts[end - 1 :]
+            return
+        if end < len(parts):
+            del parts[end:]
+        if parts:
+            parts[-1] = parts[-1].rstrip()
+        parts.append("](" + url + ")")
+
+    def _fallback_image_capped(self, url: str) -> bool:
+        if not self.prefer_main or self._main_depth:
+            return False
+        if any(asset["url"] == url for asset in self._page_assets):
+            return False
+        return len(self._page_assets) >= _FALLBACK_IMAGE_LIMIT
+
     def _append_image(self, attrs: dict[str, str]) -> None:
         url = _absolute_http_url(self.base_url, _image_candidate(attrs))
         if not url:
@@ -222,12 +270,16 @@ class ArticleHTMLParser(HTMLParser):
         height = (attrs.get("height") or "").strip()
         if width and height and _is_tiny(width, height):
             return
-        alt = " ".join((attrs.get("alt") or "").replace("[", "").replace("]", "").split())
-        self._append(f"\n\n![{alt}]({url})\n\n")
         current = self._current()
         if current is None:
             return
-        assets = current[1]
+        parts, assets = current
+        if self._fallback_image_capped(url):
+            self._suppress_image_only_link(parts)
+            return
+        alt = " ".join((attrs.get("alt") or "").replace("[", "").replace("]", "").split())
+        self._close_link_before_image(parts)
+        self._append(f"\n\n![{alt}]({url})\n\n")
         if any(asset["url"] == url for asset in assets):
             return
         asset: dict[str, str] = {"url": url, "type": "image", "source": "article_image", "alt": alt}
@@ -250,11 +302,9 @@ class ArticleHTMLParser(HTMLParser):
         if self._skip:
             self._close_root()
             return
-        if self.prefer_main and tag in _CHROME_TAGS and self._chrome:
-            self._chrome -= 1
-            self._close_root()
-            return
-        if self._chrome:
+        if self._outside_chrome():
+            if tag in _CHROME_TAGS and self._chrome:
+                self._chrome -= 1
             self._close_root()
             return
 
@@ -275,7 +325,12 @@ class ArticleHTMLParser(HTMLParser):
                 parts.append(marker)
         elif tag == "pre":
             self._pre = False
-            self._append("\n```\n\n")
+            current = self._current()
+            if current and current[0] and current[0][-1].endswith("\n"):
+                # The preformatted text already ends on a line break.
+                current[0].append("```\n\n")
+            else:
+                self._append("\n```\n\n")
         elif tag == "code" and not self._pre:
             self._append("`")
         elif tag == "a" and self._links:
@@ -288,7 +343,7 @@ class ArticleHTMLParser(HTMLParser):
         self._close_root()
 
     def handle_data(self, data):
-        if not self._inside or self._skip or self._chrome:
+        if not self._inside or self._skip or self._outside_chrome():
             return
         if not self._pre:
             data = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", data)
@@ -305,10 +360,29 @@ class ArticleHTMLParser(HTMLParser):
 
     def markdown(self) -> str:
         parts, _assets = self._selected()
-        text = "".join(parts)
-        text = re.sub(r"[ \t]+\n", "\n", text)
-        text = re.sub(r"\n[ \t]+", "\n", text)
-        return re.sub(r"\n{3,}", "\n\n", text).strip()
+        lines = "".join(parts).split("\n")
+        normalized: list[str] = []
+        in_fence = False
+        blank_run = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                in_fence = not in_fence
+                normalized.append(stripped)
+                blank_run = 0
+                continue
+            if in_fence:
+                normalized.append(line)
+                blank_run = 0
+                continue
+            if not stripped:
+                blank_run += 1
+                if blank_run == 1:
+                    normalized.append("")
+                continue
+            blank_run = 0
+            normalized.append(stripped)
+        return "\n".join(normalized).strip()
 
     def captured_assets(self) -> list[dict]:
         _parts, assets = self._selected()
