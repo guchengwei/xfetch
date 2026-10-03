@@ -142,7 +142,7 @@ class XiaohongshuConnector(BaseConnector):
             tags=tags,
             assets=assets,
             metadata=metadata,
-            lineage={"connector": "xiaohongshu", "runtime_version": "0.2.0"},
+            lineage={"connector": "xiaohongshu", "runtime_version": "0.2.1"},
             capture_status="partial" if is_video else "complete",
             content_kinds=["text", "images"] if assets else ["text"],
         )
