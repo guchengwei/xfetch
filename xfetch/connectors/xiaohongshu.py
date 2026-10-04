@@ -7,6 +7,7 @@ import json
 import re
 from urllib.request import Request
 
+from xfetch.article_html import markdown_contains_image, visual_capture_status
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
 from xfetch.net import safe_urlopen as urlopen
@@ -14,6 +15,23 @@ from xfetch.net import safe_urlopen as urlopen
 
 _XHS_URL_RE = re.compile(r"^https?://(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)/", re.IGNORECASE)
 _NOTE_ID_RE = re.compile(r"(?:explore|discovery/item|notes?)/([a-f0-9]{24})", re.IGNORECASE)
+
+
+def _note_body(text: str, image_urls: list[str]) -> tuple[str, str, list[str]]:
+    """Return plain text, markdown, and gallery image URLs.
+
+    Captions are user text, including text that looks like HTML. Gallery
+    images have no slot in the caption, so they follow the paragraphs in
+    imageList order.
+    """
+    paragraphs = [" ".join(line.split()) for line in (text or "").splitlines()]
+    paragraphs = [line for line in paragraphs if line]
+    body = "\n\n".join(paragraphs)
+    extras = [url for url in image_urls if url and not markdown_contains_image(body, url)]
+    if extras:
+        gallery = "\n\n".join(f"![]({url})" for url in extras)
+        body = f"{body}\n\n{gallery}" if body else gallery
+    return text or "", body, list(image_urls)
 
 
 def _fetch_html(url: str) -> tuple[str, str, str]:
@@ -98,14 +116,16 @@ class XiaohongshuConnector(BaseConnector):
         author = user.get("nickname") or user.get("nick_name") or "unknown"
         author_handle = _slugify(author)
         title = unescape((note.get("title") or "").strip() or "Xiaohongshu note")
-        text = unescape((note.get("desc") or note.get("content") or title).strip())
+        raw_text = unescape((note.get("desc") or note.get("content") or title).strip())
         note_type = note.get("type", "")
         image_list = note.get("imageList", note.get("image_list", [])) or []
-        assets = []
+        image_urls: list[str] = []
         for item in image_list:
             image_url = item.get("urlDefault") or item.get("url") or item.get("url_default")
-            if image_url:
-                assets.append({"url": image_url, "type": "image"})
+            if image_url and image_url not in image_urls:
+                image_urls.append(image_url)
+        text, markdown_body, image_urls = _note_body(raw_text, image_urls)
+        assets = [{"url": image_url, "type": "image"} for image_url in image_urls]
         tags = [tag.get("name") for tag in (note.get("tagList", note.get("tag_list", [])) or []) if tag.get("name")]
         interact = note.get("interactInfo", note.get("interact_info", {})) or {}
         stats = {
@@ -124,7 +144,13 @@ class XiaohongshuConnector(BaseConnector):
         }
         if is_video:
             metadata["unpreserved_media"] = ["video"]
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n- Type: {'video' if is_video else 'image'}\n\n{text}\n"
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n- Type: {'video' if is_video else 'image'}\n\n{markdown_body}\n"
+        capture_status = visual_capture_status(
+            markdown,
+            image_urls,
+            has_body=bool(markdown_body.strip()),
+            status="partial" if is_video else "complete",
+        )
 
         return NormalizedDocument(
             source_type="xiaohongshu",
@@ -143,6 +169,6 @@ class XiaohongshuConnector(BaseConnector):
             assets=assets,
             metadata=metadata,
             lineage={"connector": "xiaohongshu", "runtime_version": "0.2.1"},
-            capture_status="partial" if is_video else "complete",
+            capture_status=capture_status,
             content_kinds=["text", "images"] if assets else ["text"],
         )

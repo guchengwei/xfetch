@@ -7,6 +7,7 @@ import re
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request
 
+from xfetch.article_html import ArticleHTMLParser, markdown_contains_image
 from xfetch.net import safe_urlopen
 
 
@@ -31,11 +32,15 @@ def fetch_oembed_json(tweet_url: str, timeout: int = 10) -> dict:
 def parse_oembed_payload(payload: dict, source_url: str) -> dict:
     fragment = str(payload.get("html") or "")
     match = re.search(r"<p[^>]*>(.*?)</p>", fragment, re.IGNORECASE | re.DOTALL)
-    fragment = match.group(1) if match else fragment
-    fragment = re.sub(r"<br\s*/?>", "\n", fragment, flags=re.IGNORECASE)
-    text = unescape(re.sub(r"<[^>]+>", "", fragment)).strip()
+    inner = match.group(1) if match else fragment
+    plain = re.sub(r"<br\s*/?>", "\n", inner, flags=re.IGNORECASE)
+    text = unescape(re.sub(r"<[^>]+>", "", plain)).strip()
     if not text or text.endswith("…") or text.endswith("...") or ("https://t.co/" in text and len(text) < 80):
         raise ValueError("X oEmbed returned thin or truncated content")
+    parser = ArticleHTMLParser(source_url)
+    parser.feed(f"<article>{inner}</article>")
+    parser.close()
+    markdown = parser.markdown() or text
     status_match = re.search(r"/status/(\d+)", source_url)
     return {
         "tweet_id": status_match.group(1) if status_match else "x",
@@ -43,11 +48,14 @@ def parse_oembed_payload(payload: dict, source_url: str) -> dict:
         "screen_name": "",
         "display_name": str(payload.get("author_name") or ""),
         "text": text,
-        "markdown": text,
+        "markdown": markdown,
         "created_at": None,
         "language": None,
         "stats": {},
-        "assets": [],
+        "assets": [
+            {"url": asset["url"], "type": "image", "source": "article_image"}
+            for asset in parser.captured_assets()
+        ],
         "has_unpreserved_video": False,
     }
 
@@ -108,6 +116,23 @@ def _article_media_map(article: dict) -> dict[str, str]:
     return media_map
 
 
+def _is_list_item(text: str) -> bool:
+    first = text.splitlines()[0] if text else ""
+    return bool(re.match(r"[ \t]*(?:[-*+]|\d+[.)]) ", first))
+
+
+def _join_markdown_blocks(parts: list[str]) -> str:
+    chunks: list[str] = []
+    for part in parts:
+        if not part:
+            continue
+        if chunks and _is_list_item(chunks[-1]) and _is_list_item(part):
+            chunks[-1] = f"{chunks[-1]}\n{part}"
+        else:
+            chunks.append(part)
+    return "\n\n".join(chunks)
+
+
 def _append_deduped(parts: list[str], seen: set[str], value: str) -> None:
     cleaned = value.strip()
     if cleaned and cleaned not in seen:
@@ -122,9 +147,37 @@ def _append_asset_deduped(assets: list[dict], seen_urls: set[str], asset: dict) 
         seen_urls.add(url)
 
 
+_BLOCK_PREFIX = {
+    "header-one": "# ",
+    "header-two": "## ",
+    "header-three": "### ",
+    "header-four": "#### ",
+    "header-five": "##### ",
+    "header-six": "###### ",
+    "unordered-list-item": "- ",
+}
+
+
+def _format_block_markdown(block_type: str, markdown: str, list_index: int) -> str:
+    if not markdown:
+        return markdown
+    if block_type == "ordered-list-item":
+        return f"{list_index}. {markdown}"
+    if block_type == "blockquote":
+        return "\n".join(f"> {line}" if line else ">" for line in markdown.splitlines())
+    if block_type == "code-block" and not markdown.lstrip().startswith("```"):
+        return f"```\n{markdown}\n```"
+    prefix = _BLOCK_PREFIX.get(block_type, "")
+    return f"{prefix}{markdown}" if prefix else markdown
+
+
 def _extract_block_parts(block: dict, entity_map: dict[str, dict], media_map: dict[str, str]) -> tuple[str, str, list[dict]]:
     text_value = str(block.get("text") or "")
-    normalized_text = " ".join(text_value.split()).strip()
+    block_type = str(block.get("type") or "unstyled")
+    if block_type == "code-block":
+        normalized_text = text_value.strip("\n")
+    else:
+        normalized_text = " ".join(text_value.split()).strip()
     entity_ranges = block.get("entityRanges") or []
     text_parts: list[str] = [normalized_text] if normalized_text else []
     markdown_parts: list[str] = [normalized_text] if normalized_text else []
@@ -195,17 +248,24 @@ def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]
     content = article.get("content") or {}
     entity_map = _normalize_entity_map(content.get("entityMap"))
     media_map = _article_media_map(article)
+    list_index = 0
     for block in content.get("blocks") or []:
         if not isinstance(block, dict):
             continue
+        block_type = str(block.get("type") or "unstyled")
+        if block_type == "ordered-list-item":
+            list_index += 1
+        else:
+            list_index = 0
         block_text, block_markdown, block_assets = _extract_block_parts(block, entity_map, media_map)
+        block_markdown = _format_block_markdown(block_type, block_markdown, list_index)
         if block_text:
             _append_deduped(text_parts, seen_text, block_text)
         if block_markdown:
             _append_deduped(markdown_parts, seen_markdown, block_markdown)
         for asset in block_assets:
             _append_asset_deduped(assets, asset_urls, asset)
-    return "\n\n".join(text_parts), "\n\n".join(markdown_parts), assets
+    return "\n\n".join(text_parts), _join_markdown_blocks(markdown_parts), assets
 
 
 def _extract_tweet_media(tweet: dict) -> tuple[list[dict], bool]:
@@ -266,6 +326,14 @@ def parse_fxtwitter_payload(payload: dict) -> dict:
     if not text or text == raw_text:
         text = article_text or raw_text or text
     markdown = article_markdown or text
+    attached: list[str] = []
+    for asset in tweet_assets:
+        url = str(asset.get("url") or "").strip()
+        if url and not markdown_contains_image(markdown, url) and url not in attached:
+            attached.append(url)
+    if attached:
+        gallery = "\n\n".join(f"![]({url})" for url in attached)
+        markdown = f"{markdown.rstrip()}\n\n{gallery}" if markdown.strip() else gallery
 
     assets: list[dict] = []
     seen_urls: set[str] = set()

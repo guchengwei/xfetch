@@ -40,9 +40,16 @@ def _flush_paragraph(lines: list[str], chunks: list[str]) -> None:
     lines.clear()
 
 
-def _close_list(chunks: list[str], list_type: str | None) -> None:
-    if list_type:
-        chunks.append(f"</{list_type}>")
+def _list_depth(line: str) -> int:
+    width = 0
+    for char in line:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 2
+        else:
+            break
+    return width // 2
 
 
 def _render_markdown_body(markdown: str) -> str:
@@ -50,13 +57,45 @@ def _render_markdown_body(markdown: str) -> str:
     paragraph_lines: list[str] = []
     code_lines: list[str] = []
     in_code_block = False
-    list_type: str | None = None
+    list_stack: list[str] = []
+    li_open = False
+
+    def close_li() -> None:
+        nonlocal li_open
+        if li_open:
+            chunks.append("</li>")
+            li_open = False
+
+    def close_lists() -> None:
+        close_li()
+        while list_stack:
+            chunks.append(f"</{list_stack.pop()}>")
+
+    def open_item(level: int, wanted: str, text: str) -> None:
+        nonlocal li_open
+        if level > len(list_stack):
+            level = len(list_stack)
+        while len(list_stack) > level + 1:
+            close_li()
+            chunks.append(f"</{list_stack.pop()}>")
+        if len(list_stack) == level + 1:
+            if list_stack[-1] != wanted:
+                close_li()
+                chunks.append(f"</{list_stack.pop()}>")
+                chunks.append(f"<{wanted}>")
+                list_stack.append(wanted)
+            else:
+                close_li()
+        else:
+            chunks.append(f"<{wanted}>")
+            list_stack.append(wanted)
+        chunks.append(f"<li>{_render_inline(text)}")
+        li_open = True
 
     for line in markdown.splitlines():
         if line.startswith("```"):
             _flush_paragraph(paragraph_lines, chunks)
-            _close_list(chunks, list_type)
-            list_type = None
+            close_lists()
             if in_code_block:
                 code_html = html.escape("\n".join(code_lines))
                 chunks.append(f"<pre><code>{code_html}</code></pre>")
@@ -73,15 +112,13 @@ def _render_markdown_body(markdown: str) -> str:
         stripped = line.strip()
         if not stripped:
             _flush_paragraph(paragraph_lines, chunks)
-            _close_list(chunks, list_type)
-            list_type = None
+            close_lists()
             continue
 
         image_match = _IMAGE_LINE_RE.match(stripped)
         if image_match:
             _flush_paragraph(paragraph_lines, chunks)
-            _close_list(chunks, list_type)
-            list_type = None
+            close_lists()
             alt = html.escape(image_match.group("alt"))
             src = html.escape(image_match.group("src"))
             chunks.append(f'<p><img src="{src}" alt="{alt}"></p>')
@@ -90,8 +127,7 @@ def _render_markdown_body(markdown: str) -> str:
         heading_match = _HEADING_RE.match(stripped)
         if heading_match:
             _flush_paragraph(paragraph_lines, chunks)
-            _close_list(chunks, list_type)
-            list_type = None
+            close_lists()
             level = len(heading_match.group("level"))
             chunks.append(f"<h{level}>{_render_inline(heading_match.group('text'))}</h{level}>")
             continue
@@ -100,26 +136,20 @@ def _render_markdown_body(markdown: str) -> str:
         if list_match:
             _flush_paragraph(paragraph_lines, chunks)
             wanted_type = "ul" if _UL_RE.match(stripped) else "ol"
-            if list_type != wanted_type:
-                _close_list(chunks, list_type)
-                chunks.append(f"<{wanted_type}>")
-                list_type = wanted_type
-            chunks.append(f"<li>{_render_inline(list_match.group('text'))}</li>")
+            open_item(_list_depth(line), wanted_type, list_match.group("text"))
             continue
 
         if stripped.startswith("> "):
             _flush_paragraph(paragraph_lines, chunks)
-            _close_list(chunks, list_type)
-            list_type = None
+            close_lists()
             chunks.append(f"<blockquote>{_render_inline(stripped[2:])}</blockquote>")
             continue
 
-        _close_list(chunks, list_type)
-        list_type = None
+        close_lists()
         paragraph_lines.append(line)
 
     _flush_paragraph(paragraph_lines, chunks)
-    _close_list(chunks, list_type)
+    close_lists()
     if code_lines:
         code_html = html.escape("\n".join(code_lines))
         chunks.append(f"<pre><code>{code_html}</code></pre>")

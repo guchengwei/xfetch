@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request
 from urllib.error import HTTPError
 
+from xfetch.article_html import ArticleHTMLParser
 from xfetch.connectors.base import BaseConnector
 from xfetch.connectors.x import is_x_url
 from xfetch.models import NormalizedDocument
@@ -31,7 +32,6 @@ class _HTMLDocumentParser(HTMLParser):
         self.open_graph_image = None
         self.open_graph_image_width = None
         self.open_graph_image_height = None
-        self.images: list[dict] = []
         self._in_title = False
         self._skip_depth = 0
         self._main_depth = 0
@@ -65,19 +65,6 @@ class _HTMLDocumentParser(HTMLParser):
             rel = (attrs_dict.get("rel") or "").lower()
             if "canonical" in rel and attrs_dict.get("href"):
                 self.canonical_url = attrs_dict["href"].strip()
-        if lowered == "img" and self._main_depth:
-            source = attrs_dict.get("src") or attrs_dict.get("data-src") or attrs_dict.get("data-original")
-            if source and len(self.images) < 4:
-                self.images.append(
-                    {
-                        "url": source.strip(),
-                        "type": "image",
-                        "source": "article_image",
-                        "alt": (attrs_dict.get("alt") or "").strip(),
-                        "width": attrs_dict.get("width"),
-                        "height": attrs_dict.get("height"),
-                    }
-                )
         if lowered in {"p", "div", "section", "article", "main", "br", "li", "h1", "h2", "h3", "h4"}:
             self._append("\n")
 
@@ -166,10 +153,16 @@ class WebConnector(BaseConnector):
         title = " ".join((parser.open_graph_title or parser.title).split()) or urlparse(canonical_url).path.strip("/") or canonical_url
         author_handle = _domain_handle(canonical_url)
         author = parser.author or author_handle
-        text = parser.text_content() or title
+        body_parser = ArticleHTMLParser(fetched_url, prefer_main=True)
+        body_parser.feed(html)
+        body_parser.close()
+        markdown_body = body_parser.markdown()
+        text = body_parser.text() or parser.text_content() or title
+        if not markdown_body:
+            markdown_body = text
         external_id = sha1(canonical_url.encode("utf-8")).hexdigest()[:12]
         fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n\n{text}\n"
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Author: {author}\n\n{markdown_body}\n"
         assets: list[dict] = []
         seen_urls: set[str] = set()
         if parser.open_graph_image:
@@ -184,12 +177,10 @@ class WebConnector(BaseConnector):
                 }
             )
             seen_urls.add(image_url)
-        for image in parser.images:
-            image_url = urljoin(fetched_url, image["url"])
+        for asset in body_parser.captured_assets():
+            image_url = asset["url"]
             if image_url in seen_urls or not image_url.startswith(("http://", "https://")):
                 continue
-            asset = dict(image)
-            asset["url"] = image_url
             assets.append(asset)
             seen_urls.add(image_url)
 

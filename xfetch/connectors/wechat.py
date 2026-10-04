@@ -2,54 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from html import unescape
-from html.parser import HTMLParser
 import re
 from urllib.request import Request
 
+from xfetch.article_html import ArticleHTMLParser, visual_capture_status
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
 from xfetch.net import safe_urlopen as urlopen
 
 
 _WECHAT_URL_RE = re.compile(r"^https?://mp\.weixin\.qq\.com/", re.IGNORECASE)
-
-
-class _WeChatContentParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self._capture_depth = 0
-        self._chunks: list[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs_dict = {key.lower(): value for key, value in attrs}
-        classes = attrs_dict.get("class", "") or ""
-        if tag.lower() == "div" and "rich_media_content" in classes:
-            self._capture_depth = 1
-            return
-        if self._capture_depth:
-            self._capture_depth += 1
-            if tag.lower() in {"p", "div", "section", "article", "br", "li", "h1", "h2", "h3"}:
-                self._chunks.append("\n")
-
-    def handle_endtag(self, tag):
-        if self._capture_depth:
-            if tag.lower() in {"p", "div", "section", "article", "li"}:
-                self._chunks.append("\n")
-            self._capture_depth -= 1
-
-    def handle_data(self, data):
-        if not self._capture_depth:
-            return
-        text = " ".join(unescape(data).split())
-        if text:
-            self._chunks.append(text)
-
-    def text_content(self) -> str:
-        text = " ".join(self._chunks)
-        text = re.sub(r"\s*\n\s*", "\n", text)
-        text = re.sub(r"\n{2,}", "\n\n", text)
-        text = re.sub(r"[ \t]{2,}", " ", text)
-        return text.strip()
 
 
 def _fetch_html(url: str) -> tuple[str, str, str]:
@@ -71,17 +33,6 @@ def _extract_first(pattern: str, text: str) -> str | None:
     if not match:
         return None
     return unescape(match.group(1).strip())
-
-
-def _extract_images(html: str) -> list[dict[str, str]]:
-    seen: set[str] = set()
-    assets: list[dict[str, str]] = []
-    for match in re.finditer(r'data-src=["\'](https?://[^"\']+)["\']', html, re.IGNORECASE):
-        url = match.group(1)
-        if url not in seen:
-            seen.add(url)
-            assets.append({"url": url, "type": "image"})
-    return assets
 
 
 def _normalize_timestamp(raw_timestamp: str | None) -> str | None:
@@ -113,10 +64,11 @@ class WeChatConnector(BaseConnector):
         if _looks_blocked(html):
             raise ValueError("WeChat returned an anti-scraping verification page")
 
-        parser = _WeChatContentParser()
-        parser.feed(html)
-        parser.close()
-        text = parser.text_content()
+        body_parser = ArticleHTMLParser(canonical_url, root_class="rich_media_content")
+        body_parser.feed(html)
+        body_parser.close()
+        captured_body = body_parser.markdown()
+        captured_text = body_parser.text()
 
         title = _extract_first(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']*)["\']', html)
         if not title:
@@ -125,14 +77,20 @@ class WeChatConnector(BaseConnector):
         account = _extract_first(r'var\s+nickname\s*=\s*["\']([^"\']+)["\']', html)
         if not account:
             account = _extract_first(r'<a[^>]*id=["\']js_name["\'][^>]*>(.*?)</a>', html)
-        if not text:
-            text = title or canonical_url
-        assets = _extract_images(html)
+        text = captured_text or title or canonical_url
+        assets = [{"url": item["url"], "type": "image"} for item in body_parser.captured_assets()]
         created_at = _normalize_timestamp(_extract_first(r'var\s+ct\s*=\s*["\']?(\d+)["\']?', html))
         title = title or text.splitlines()[0][:80]
         author = author or account or "unknown"
         author_handle = account or "unknown"
-        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Account: {author_handle}\n- Author: {author}\n\n{text}\n"
+        markdown_body = captured_body or text
+        markdown = f"# {title}\n\n- Source: {canonical_url}\n- Account: {author_handle}\n- Author: {author}\n\n{markdown_body}\n"
+        capture_status = visual_capture_status(
+            markdown,
+            [item["url"] for item in assets],
+            has_body=bool(captured_body.strip()),
+            status="complete",
+        )
 
         return NormalizedDocument(
             source_type="wechat",
@@ -150,6 +108,6 @@ class WeChatConnector(BaseConnector):
             assets=assets,
             metadata={"platform": "wechat", "account": account, "content_type": content_type},
             lineage={"connector": "wechat", "runtime_version": "0.2.1"},
-            capture_status="complete" if parser.text_content() else "partial",
+            capture_status=capture_status,
             content_kinds=["text", "images"] if assets else ["text"],
         )

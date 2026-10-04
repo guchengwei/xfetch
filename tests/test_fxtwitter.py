@@ -117,6 +117,76 @@ def test_parse_fxtwitter_payload_preserves_inline_article_images_and_assets():
     assert result["assets"] == [{"url": image_url, "type": "image", "source": "article_inline", "media_id": "999"}]
 
 
+def test_parse_fxtwitter_payload_preserves_article_heading_list_and_code_structure():
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "",
+            "raw_text": {"text": "https://t.co/abc"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "article": {
+                "title": "Article title",
+                "content": {
+                    "blocks": [
+                        {"type": "header-two", "text": "Heading"},
+                        {"type": "unstyled", "text": "Paragraph one"},
+                        {"type": "ordered-list-item", "text": "First"},
+                        {"type": "ordered-list-item", "text": "Second"},
+                        {"type": "code-block", "text": "keep  spaces\nnext"},
+                    ]
+                },
+            },
+            "media": {"all": []},
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert "## Heading\n\nParagraph one\n\n1. First\n2. Second" in result["markdown"]
+    assert "```\nkeep  spaces\nnext\n```" in result["markdown"]
+    assert "## Heading" not in result["text"]
+    assert "Heading" in result["text"]
+
+
+def test_parse_fxtwitter_payload_places_tweet_photos_after_text():
+    first = "https://pbs.twimg.com/media/photo-1.jpg"
+    second = "https://pbs.twimg.com/media/photo-2.jpg"
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "photo post",
+            "raw_text": {"text": "photo post"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "media": {
+                "photos": [
+                    {"id": "m1", "type": "photo", "url": first},
+                    {"id": "m2", "type": "photo", "url": second},
+                ],
+                "all": [
+                    {"id": "m1", "type": "photo", "url": first},
+                    {"id": "m2", "type": "photo", "url": second},
+                ],
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert result["markdown"].index("photo post") < result["markdown"].index(first) < result["markdown"].index(second)
+    assert f"![]({first})" in result["markdown"]
+    assert f"![]({second})" in result["markdown"]
+
+
+def test_oembed_keeps_line_breaks_and_links():
+    from xfetch.backends.fxtwitter import parse_oembed_payload
+
+    payload = {
+        "author_name": "Alice",
+        "html": '<blockquote><p>First line<br>Second line <a href="https://example.com/a">docs</a> and more words.</p></blockquote>',
+    }
+    result = parse_oembed_payload(payload, "https://x.com/alice/status/123")
+    assert "First line\n\nSecond line" in result["markdown"]
+    assert "[docs](https://example.com/a)" in result["markdown"]
+
+
 def test_parse_fxtwitter_payload_preserves_normal_tweet_photos():
     image_url = "https://pbs.twimg.com/media/photo-1.jpg"
     payload = {
