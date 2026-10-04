@@ -129,13 +129,65 @@ def test_fallback_page_keeps_four_images_and_article_keeps_all():
     assert "logo.png" not in fallback.markdown()
     assert "Intro." in fallback.markdown()
 
+    prose = (
+        "This paragraph is long enough to show the main element is the article "
+        "body rather than a gallery of cards."
+    )
     article = ArticleHTMLParser("https://example.com/post", prefer_main=True)
-    article.feed(f"<main><p>Body.</p>{many}</main>")
+    article.feed(f"<main><p>{prose}</p>{many}</main>")
     article.close()
     assert [asset["url"] for asset in article.captured_assets()] == [
         f"https://example.com/img-{i}.jpg" for i in range(1, 6)
     ]
     assert "img-5.jpg" in article.markdown()
+
+    single = ArticleHTMLParser("https://example.com/post", prefer_main=True)
+    single.feed(f"<article><p>Note.</p>{many}</article>")
+    single.close()
+    assert len(single.captured_assets()) == 5
+    assert "img-5.jpg" in single.markdown()
+
+
+def test_listing_pages_keep_four_images():
+    many = "".join(f'<figure><img alt="n{i}" src="/shot-{i}.jpg"><figcaption>Shot {i}</figcaption></figure>' for i in range(1, 7))
+    gallery = ArticleHTMLParser("https://example.com/gallery", prefer_main=True)
+    gallery.feed(f"<main><h1>Gallery</h1>{many}</main>")
+    gallery.close()
+    assert [asset["url"] for asset in gallery.captured_assets()] == [
+        f"https://example.com/shot-{i}.jpg" for i in range(1, 5)
+    ]
+    assert "shot-5.jpg" not in gallery.markdown()
+    assert "Gallery" in gallery.markdown()
+    assert "Shot 6" in gallery.markdown()
+
+    cards = "".join(
+        f'<article><h2>Card {i}</h2><p>A listed post with its own summary and picture.</p>'
+        f'<img alt="c{i}" src="/card-{i}.jpg"></article>'
+        for i in range(1, 7)
+    )
+    listing = ArticleHTMLParser("https://example.com/blog", prefer_main=True)
+    listing.feed(f"<main>{cards}</main>")
+    listing.close()
+    assert [asset["url"] for asset in listing.captured_assets()] == [
+        f"https://example.com/card-{i}.jpg" for i in range(1, 5)
+    ]
+    assert "card-5.jpg" not in listing.markdown()
+    assert "Card 1" in listing.markdown()
+    assert "Card 6" in listing.markdown()
+
+
+def test_nested_lists_keep_their_indent():
+    parser = ArticleHTMLParser("https://example.com/post")
+    parser.feed("<ul><li>Parent<ul><li>Child</li></ul></li><li>Sibling</li></ul>")
+    parser.close()
+    assert parser.markdown() == "- Parent\n  - Child\n- Sibling"
+
+
+def test_plain_or_linked_url_is_not_a_complete_visual_capture():
+    image = "https://cdn.example.com/chart.jpg"
+    assert visual_capture_status(f"See {image} for the chart.", [image], has_body=True) == "partial"
+    assert visual_capture_status(f"See [chart]({image}).", [image], has_body=True) == "partial"
+    assert visual_capture_status(f"Before.\n\n![]({image})\n\nAfter.", [image], has_body=True) == "complete"
 
 
 def test_prefer_main_drops_chrome_and_keeps_article_order():

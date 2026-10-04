@@ -11,11 +11,15 @@ _CHROME_TAGS = {"nav", "header", "footer", "aside"}
 _BLOCK_TAGS = {"p", "div", "section", "article", "main", "figure", "figcaption", "blockquote", "tr", "table"}
 _LIST_TRANSPARENT_TAGS = {"p", "div", "section", "figure", "figcaption"}
 _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-# Generic pages with no article/main used to keep four images. A real article body is not capped.
+# Listings and pages with no single article keep four images. One article body is not capped.
 _FALLBACK_IMAGE_LIMIT = 4
 _IMAGE_LINE_RE = re.compile(r"^!\[[^\]]*\]\([^)]*\)$")
+_IMAGE_EMBED_RE = re.compile(r"!\[([^\]]*)\]\(([^)\n]*)\)")
 _HEADING_RE = re.compile(r"^#{1,6}\s+")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_LIST_LINE_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
+# A generic web page is not one article when its longest paragraph is only a caption.
+_ARTICLE_PARAGRAPH_MIN = 80
 
 
 def _markdown_destination(url: str) -> str:
@@ -77,6 +81,36 @@ def markdown_to_text(markdown: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+def image_destinations(markdown: str) -> set[str]:
+    """URLs that are actually image targets, not plain text or ordinary links."""
+    destinations: set[str] = set()
+    for _alt, raw in _IMAGE_EMBED_RE.findall(markdown or ""):
+        token = _destination_token(raw)
+        if token:
+            destinations.add(token)
+    return destinations
+
+
+def markdown_contains_image(markdown: str, url: str) -> bool:
+    return bool(url) and url in image_destinations(markdown)
+
+
+def _destination_token(raw: str) -> str:
+    token = raw.strip().split()[0] if raw.strip() else ""
+    if token.startswith("<") and token.endswith(">") and len(token) > 2:
+        token = token[1:-1]
+    return token
+
+
+def _omit_images(text: str, kept_urls: set[str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        if _destination_token(match.group(2)) in kept_urls:
+            return match.group(0)
+        return ""
+
+    return _IMAGE_EMBED_RE.sub(replace, text)
+
+
 def visual_capture_status(
     markdown: str,
     image_urls: list[str],
@@ -88,7 +122,8 @@ def visual_capture_status(
     if status != "complete":
         return status
     urls = [url for url in image_urls if url]
-    if urls and not all(url in (markdown or "") for url in urls):
+    placed = image_destinations(markdown)
+    if urls and not all(url in placed for url in urls):
         return "partial"
     if not has_body and not urls:
         return "partial"
@@ -123,6 +158,11 @@ class ArticleHTMLParser(HTMLParser):
         self._links: list[str | None] = []
         self._emphasis: list[tuple[str, list[str], int]] = []
         self._pending_marker = False
+        self._article_count = 0
+        self._main_count = 0
+        self._p_depth = 0
+        self._paragraph_chars = 0
+        self._main_longest_paragraph = 0
 
     def _outside_chrome(self) -> bool:
         # Page chrome only. A header or aside inside article/main is article content,
@@ -179,18 +219,27 @@ class ArticleHTMLParser(HTMLParser):
             return
         if self.prefer_main and tag in {"article", "main"}:
             self._main_depth += 1
+            if tag == "article":
+                self._article_count += 1
+            else:
+                self._main_count += 1
         if self.prefer_main and tag in _CHROME_TAGS and self._main_depth == 0:
             self._chrome += 1
             return
         if self._outside_chrome():
             return
 
+        if tag == "p":
+            self._p_depth += 1
+            if self._p_depth == 1:
+                self._paragraph_chars = 0
         if tag in _BLOCK_TAGS:
             self._append_block(tag, opening=True)
         elif re.fullmatch(r"h[1-6]", tag):
             self._append("\n\n" + "#" * int(tag[1]) + " ")
         elif tag in {"ul", "ol"}:
-            self._append("\n\n")
+            if not self._lists:
+                self._append("\n\n")
             self._lists.append(0 if tag == "ol" else None)
         elif tag == "li":
             marker = "- "
@@ -230,15 +279,6 @@ class ArticleHTMLParser(HTMLParser):
             end -= 1
         return end
 
-    def _suppress_image_only_link(self, parts: list[str]) -> None:
-        """Drop an anchor whose only content is this image so it does not become `[](url)`."""
-        end = self._link_label_end(parts)
-        if end is None:
-            return
-        if end > 0 and parts[end - 1] == "[":
-            del parts[end - 1 :]
-            self._links[-1] = None
-
     def _close_link_before_image(self, parts: list[str]) -> None:
         """A linked image is not `[` + image block + `](url)`. Close any text link first."""
         end = self._link_label_end(parts)
@@ -255,13 +295,6 @@ class ArticleHTMLParser(HTMLParser):
             parts[-1] = parts[-1].rstrip()
         parts.append("](" + url + ")")
 
-    def _fallback_image_capped(self, url: str) -> bool:
-        if not self.prefer_main or self._main_depth:
-            return False
-        if any(asset["url"] == url for asset in self._page_assets):
-            return False
-        return len(self._page_assets) >= _FALLBACK_IMAGE_LIMIT
-
     def _append_image(self, attrs: dict[str, str]) -> None:
         url = _absolute_http_url(self.base_url, _image_candidate(attrs))
         if not url:
@@ -274,9 +307,6 @@ class ArticleHTMLParser(HTMLParser):
         if current is None:
             return
         parts, assets = current
-        if self._fallback_image_capped(url):
-            self._suppress_image_only_link(parts)
-            return
         alt = " ".join((attrs.get("alt") or "").replace("[", "").replace("]", "").split())
         self._close_link_before_image(parts)
         self._append(f"\n\n![{alt}]({url})\n\n")
@@ -308,6 +338,12 @@ class ArticleHTMLParser(HTMLParser):
             self._close_root()
             return
 
+        if tag == "p" and self._p_depth:
+            if self._p_depth == 1:
+                if self.prefer_main and self._main_depth:
+                    self._main_longest_paragraph = max(self._main_longest_paragraph, self._paragraph_chars)
+                self._paragraph_chars = 0
+            self._p_depth -= 1
         if tag in _BLOCK_TAGS:
             self._append_block(tag, opening=False)
         elif re.fullmatch(r"h[1-6]", tag):
@@ -315,7 +351,8 @@ class ArticleHTMLParser(HTMLParser):
         elif tag in {"ul", "ol"}:
             if self._lists:
                 self._lists.pop()
-            self._append("\n\n")
+            if not self._lists:
+                self._append("\n\n")
         elif tag in {"strong", "b", "em", "i"} and self._emphasis:
             opening_tag, parts, start = self._emphasis.pop()
             content = "".join(parts[start + 1 :])
@@ -349,14 +386,37 @@ class ArticleHTMLParser(HTMLParser):
             data = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", data)
         text = data if self._pre else re.sub(r"\s+", " ", data)
         if text:
+            if self._p_depth and text.strip():
+                self._paragraph_chars += len(text)
             self._append(text)
 
-    def _selected(self) -> tuple[list[str], list[dict]]:
+    def _raw_selected(self) -> tuple[list[str], list[dict]]:
         if self.prefer_main and any(part.strip() for part in self._main_parts):
             return self._main_parts, self._main_assets
         if self.prefer_main:
             return self._page_parts, self._page_assets
         return self._parts, self._assets
+
+    def _listing_image_cap(self) -> int | None:
+        """Bound generic web listings. One article body, including WeChat, stays whole."""
+        if not self.prefer_main:
+            return None
+        if self._article_count > 1 or self._main_count > 1:
+            return _FALLBACK_IMAGE_LIMIT
+        if self._article_count == 1:
+            return None
+        if self._main_count == 1 and self._main_longest_paragraph >= _ARTICLE_PARAGRAPH_MIN:
+            return None
+        return _FALLBACK_IMAGE_LIMIT
+
+    def _selected(self) -> tuple[list[str], list[dict]]:
+        parts, assets = self._raw_selected()
+        limit = self._listing_image_cap()
+        if limit is None or len(assets) <= limit:
+            return parts, assets
+        kept = assets[:limit]
+        kept_urls = {asset["url"] for asset in kept}
+        return [_omit_images("".join(parts), kept_urls)], kept
 
     def markdown(self) -> str:
         parts, _assets = self._selected()
@@ -381,7 +441,11 @@ class ArticleHTMLParser(HTMLParser):
                     normalized.append("")
                 continue
             blank_run = 0
-            normalized.append(stripped)
+            if _LIST_LINE_RE.match(stripped):
+                leading = line[: len(line) - len(line.lstrip(" \t"))]
+                normalized.append(leading + stripped)
+            else:
+                normalized.append(stripped)
         return "\n".join(normalized).strip()
 
     def captured_assets(self) -> list[dict]:

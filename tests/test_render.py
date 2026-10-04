@@ -1,6 +1,6 @@
 import json
 
-from xfetch.storage.render import render_bundle_page
+from xfetch.storage.render import _render_markdown_body, render_bundle_page
 
 
 def test_render_bundle_page_writes_index_html(tmp_path):
@@ -38,3 +38,10 @@ def test_render_bundle_page_renders_common_markdown(tmp_path):
     assert "<img" in html
     assert "<pre><code>" in html
     assert (page.parent / "assets" / "image-01.jpg").exists()
+
+
+def test_nested_list_items_render_inside_their_parent():
+    html = _render_markdown_body("- Parent\n  - Child\n- Sibling\n")
+    assert "<li>Parent<ul>" in html.replace("\n", "")
+    assert "<li>Child</li>" in html.replace("\n", "")
+    assert html.replace("\n", "").index("Parent") < html.replace("\n", "").index("Child") < html.replace("\n", "").index("Sibling")

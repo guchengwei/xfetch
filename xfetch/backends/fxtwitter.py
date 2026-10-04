@@ -7,7 +7,7 @@ import re
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request
 
-from xfetch.article_html import ArticleHTMLParser
+from xfetch.article_html import ArticleHTMLParser, markdown_contains_image
 from xfetch.net import safe_urlopen
 
 
@@ -329,7 +329,7 @@ def parse_fxtwitter_payload(payload: dict) -> dict:
     attached: list[str] = []
     for asset in tweet_assets:
         url = str(asset.get("url") or "").strip()
-        if url and url not in markdown and url not in attached:
+        if url and not markdown_contains_image(markdown, url) and url not in attached:
             attached.append(url)
     if attached:
         gallery = "\n\n".join(f"![]({url})" for url in attached)

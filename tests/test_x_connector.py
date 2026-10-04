@@ -57,6 +57,24 @@ def test_x_photo_post_keeps_image_in_markdown_and_complete_status():
     assert doc.capture_status == "complete"
 
 
+def test_x_photo_url_in_the_text_still_becomes_an_image():
+    image_url = "https://pbs.twimg.com/media/photo-1.jpg"
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": f"look {image_url}",
+            "raw_text": {"text": f"look {image_url}"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "media": {"photos": [{"id": "m1", "type": "photo", "url": image_url}]},
+        }
+    }
+    doc = XConnector().normalize_payload("https://x.com/alice/status/123", payload)
+    assert f"![]({image_url})" in doc.markdown
+    assert doc.markdown.index(f"look {image_url}") < doc.markdown.index(f"![]({image_url})")
+    assert doc.capture_status == "complete"
+
+
 def test_x_text_without_inline_image_is_not_a_complete_visual_capture():
     doc = XConnector()._normalize_raw(
         "https://x.com/alice/status/123",

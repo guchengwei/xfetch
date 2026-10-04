@@ -111,6 +111,35 @@ def test_xiaohongshu_caption_keeps_literal_markup(monkeypatch):
     assert doc.capture_status == "complete"
 
 
+def test_xiaohongshu_caption_url_still_gets_a_gallery_image(monkeypatch):
+    html = """
+    <html><head><script>
+      window.__INITIAL_STATE__ = {
+        "note": {"noteDetailMap": {"67b8e3f5000000000b00d8e2": {"note": {
+          "title": "Linked shot",
+          "desc": "See https://cdn.example.com/gallery.jpg for the shot",
+          "type": "normal",
+          "user": {"nickname": "Alice XHS"},
+          "imageList": [
+            {"urlDefault": "https://cdn.example.com/gallery.jpg"}
+          ]
+        }}}}
+      };
+    </script></head></html>
+    """
+    monkeypatch.setattr(
+        "xfetch.connectors.xiaohongshu.urlopen",
+        lambda request, timeout=15: FakeResponse(html, "https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2"),
+    )
+    doc = XiaohongshuConnector().fetch("https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2")
+    image = "https://cdn.example.com/gallery.jpg"
+    assert f"See {image} for the shot" in doc.markdown
+    assert f"![]({image})" in doc.markdown
+    assert doc.markdown.index("for the shot") < doc.markdown.index(f"![]({image})")
+    assert [asset["url"] for asset in doc.assets] == [image]
+    assert doc.capture_status == "complete"
+
+
 def test_xiaohongshu_connector_matches_site_and_short_urls():
     connector = XiaohongshuConnector()
     assert connector.can_handle("https://www.xiaohongshu.com/explore/67b8e3f5000000000b00d8e2") is True

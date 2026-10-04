@@ -7,7 +7,7 @@ import json
 import re
 from urllib.request import Request
 
-from xfetch.article_html import visual_capture_status
+from xfetch.article_html import markdown_contains_image, visual_capture_status
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument
 from xfetch.net import safe_urlopen as urlopen
@@ -27,7 +27,7 @@ def _note_body(text: str, image_urls: list[str]) -> tuple[str, str, list[str]]:
     paragraphs = [" ".join(line.split()) for line in (text or "").splitlines()]
     paragraphs = [line for line in paragraphs if line]
     body = "\n\n".join(paragraphs)
-    extras = [url for url in image_urls if url and url not in body]
+    extras = [url for url in image_urls if url and not markdown_contains_image(body, url)]
     if extras:
         gallery = "\n\n".join(f"![]({url})" for url in extras)
         body = f"{body}\n\n{gallery}" if body else gallery

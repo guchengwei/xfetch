@@ -161,10 +161,14 @@ def test_web_connector_bounds_fallback_images_and_keeps_article_images(monkeypat
     assert "img-5.jpg" not in fallback.markdown
     assert "Intro." in fallback.markdown
 
+    prose = (
+        "This paragraph is long enough to show the main element is the article "
+        "body rather than a gallery of cards."
+    )
     article = fetch(
         "<html><head><title>Page</title>"
         '<meta property="og:image" content="https://cdn.example.com/card.jpg">'
-        f"</head><body><main><p>Body.</p>{many}</main></body></html>"
+        f"</head><body><main><p>{prose}</p>{many}</main></body></html>"
     )
     assert [asset["url"] for asset in article.assets] == [
         "https://cdn.example.com/card.jpg",
@@ -172,6 +176,17 @@ def test_web_connector_bounds_fallback_images_and_keeps_article_images(monkeypat
     ]
     assert "img-5.jpg" in article.markdown
     assert "card.jpg" not in article.markdown
+
+    cards = "".join(
+        f'<article><h2>Card {i}</h2><img alt="c{i}" src="/card-{i}.jpg"></article>'
+        for i in range(1, 7)
+    )
+    listing = fetch(f"<html><head><title>Blog</title></head><body><main>{cards}</main></body></html>")
+    assert [asset["url"] for asset in listing.assets] == [
+        f"https://example.com/card-{i}.jpg" for i in range(1, 5)
+    ]
+    assert "card-6.jpg" not in listing.markdown
+    assert "Card 6" in listing.markdown
 
 
 def test_web_connector_matches_generic_http_urls_but_not_x_or_rss():
