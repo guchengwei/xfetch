@@ -222,6 +222,46 @@ def test_medium_403_uses_matching_feed_article(monkeypatch):
         WebConnector().fetch(url.replace('f9a378cea385', 'aaaaaaaaaaaa'))
 
 
+def test_zhihu_403_challenge_raises_explicit_error(monkeypatch):
+    from urllib.error import HTTPError
+    import pytest
+    url = "https://zhuanlan.zhihu.com/p/692256732"
+
+    class Body:
+        def read(self, amt=-1):
+            return b'<html><meta id="zh-zse-ck" content="token"></html>'
+
+        def close(self):
+            return None
+
+    def blocked(*args, **kwargs):
+        raise HTTPError(url, 403, "Forbidden", {}, Body())
+
+    monkeypatch.setattr("xfetch.connectors.web._fetch_url", blocked)
+    with pytest.raises(ValueError, match="zse-ck anti-bot challenge"):
+        WebConnector().fetch(url)
+
+
+def test_zhihu_403_without_challenge_marker_stays_http_error(monkeypatch):
+    from urllib.error import HTTPError
+    import pytest
+    url = "https://zhuanlan.zhihu.com/p/692256732"
+
+    class Body:
+        def read(self, amt=-1):
+            return b"<html>forbidden</html>"
+
+        def close(self):
+            return None
+
+    def blocked(*args, **kwargs):
+        raise HTTPError(url, 403, "Forbidden", {}, Body())
+
+    monkeypatch.setattr("xfetch.connectors.web._fetch_url", blocked)
+    with pytest.raises(HTTPError):
+        WebConnector().fetch(url)
+
+
 def test_non_medium_and_non_403_errors_do_not_use_feed(monkeypatch):
     from urllib.error import HTTPError
     import pytest

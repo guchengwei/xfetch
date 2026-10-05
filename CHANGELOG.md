@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- capture anonymously readable Feishu and Lark wiki/docx text
+- capture Bilibili opus article text and images
+- fail Zhihu zse-ck challenges with an explicit error instead of a bare HTTP 403
+
 ## 0.2.1 - 2026-10-03
 
 - allow egress proxy fake-ip range `198.18.0.0/15` in `validate_public_url` while still refusing localhost, real private, link-local, and metadata addresses
