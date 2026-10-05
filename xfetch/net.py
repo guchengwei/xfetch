@@ -5,7 +5,7 @@ from copy import copy
 import ipaddress
 import socket
 from urllib.parse import quote, urlparse, urlsplit, urlunsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 
 
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
@@ -91,7 +91,7 @@ class _LimitedResponse:
         return False
 
 
-def safe_urlopen(request_or_url, timeout: int = 10, max_bytes: int = DEFAULT_MAX_BYTES):
+def safe_urlopen(request_or_url, timeout: int = 10, max_bytes: int = DEFAULT_MAX_BYTES, cookie_jar=None):
     if isinstance(request_or_url, Request):
         url = request_or_url.full_url
     else:
@@ -103,7 +103,11 @@ def safe_urlopen(request_or_url, timeout: int = 10, max_bytes: int = DEFAULT_MAX
         request_or_url.full_url = encoded_url
     else:
         request_or_url = encoded_url
-    opener = build_opener(_SafeRedirectHandler())
+    handlers = []
+    if cookie_jar is not None:
+        handlers.append(HTTPCookieProcessor(cookie_jar))
+    handlers.append(_SafeRedirectHandler())
+    opener = build_opener(*handlers)
     response = opener.open(request_or_url, timeout=timeout)
     final_url = response.geturl()
     try:

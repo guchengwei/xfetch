@@ -42,6 +42,37 @@ def test_validate_public_url_blocks_rfc1918_private(monkeypatch):
         validate_public_url("https://example.test/internal")
 
 
+def test_safe_urlopen_installs_cookie_jar_when_provided(monkeypatch):
+    from http.cookiejar import CookieJar
+    from urllib.request import HTTPCookieProcessor
+    from xfetch.net import safe_urlopen
+
+    seen = {}
+
+    class Response:
+        def geturl(self):
+            return "https://example.com/a"
+
+        def close(self):
+            return None
+
+    class Opener:
+        def open(self, value, timeout):
+            return Response()
+
+    def build(*handlers):
+        seen["handlers"] = handlers
+        return Opener()
+
+    monkeypatch.setattr("xfetch.net.build_opener", build)
+    monkeypatch.setattr("xfetch.net.validate_public_url", lambda value: value)
+    jar = CookieJar()
+    safe_urlopen("https://example.com/a", cookie_jar=jar)
+    assert isinstance(seen["handlers"][0], HTTPCookieProcessor)
+    assert seen["handlers"][0].cookiejar is jar
+    assert type(seen["handlers"][1]).__name__ == "_SafeRedirectHandler"
+
+
 @pytest.mark.parametrize('as_request', [False, True])
 def test_safe_urlopen_encodes_unicode_without_double_encoding(monkeypatch, as_request):
     from urllib.request import Request

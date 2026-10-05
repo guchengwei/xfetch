@@ -180,4 +180,87 @@ def test_bilibili_connector_matches_bilibili_urls_only():
     connector = BilibiliConnector()
     assert connector.can_handle("https://www.bilibili.com/video/BV1xx411c7mD") is True
     assert connector.can_handle("https://b23.tv/BV1xx411c7mD") is True
+    assert connector.can_handle("https://www.bilibili.com/opus/1245575923568214023") is True
     assert connector.can_handle("https://example.com/video/BV1xx411c7mD") is False
+
+
+def test_bilibili_connector_captures_opus_article(monkeypatch):
+    payload = json.dumps({
+        "code": 0,
+        "message": "0",
+        "data": {"item": {
+            "basic": {"title": "Opus Title"},
+            "modules": [
+                {"module_author": {"name": "UP Author", "pub_ts": 1788846644}},
+                {"module_content": {"paragraphs": [
+                    {"para_type": 1, "text": {"nodes": [{"word": {"words": "Hello opus", "font_level": "xxLarge"}}]}},
+                    {"para_type": 1, "text": {"nodes": [
+                        {"word": {"words": "Body text", "font_level": "regular"}},
+                        {"rich": {"text": "docs", "jump_url": "http://example.com/a"}},
+                    ]}},
+                    {"para_type": 2, "pic": {"pics": [{"url": "http://i0.hdslb.com/bfs/a.png", "width": 10, "height": 20}]}},
+                    {"para_type": 5, "list": {"style": 1, "theme": "arabic_num", "start": 1, "items": [
+                        {"nodes": [{"word": {"words": "One"}}]},
+                        {"nodes": [{"word": {"words": "Two"}}]},
+                    ]}},
+                ]}},
+            ],
+        }},
+    })
+    calls = []
+
+    def fake(request, timeout=10, cookie_jar=None):
+        calls.append((request.full_url, cookie_jar))
+        return FakeResponse(payload, request.full_url)
+
+    monkeypatch.setattr("xfetch.connectors.bilibili.urlopen", fake)
+    doc = BilibiliConnector().fetch("https://www.bilibili.com/opus/124?spm=1")
+    assert doc.source_type == "bilibili"
+    assert doc.external_id == "124"
+    assert doc.canonical_url == "https://www.bilibili.com/opus/124"
+    assert doc.title == "Opus Title"
+    assert doc.author == "UP Author"
+    assert doc.author_handle == "up-author"
+    assert doc.created_at == "2026-09-08T05:50:44Z"
+    assert "Hello opus" in doc.text
+    assert "Body text[docs](https://example.com/a)" in doc.text
+    assert "## Hello opus" in doc.markdown
+    assert "1. One\n2. Two" in doc.markdown
+    assert doc.assets == [{"url": "https://i0.hdslb.com/bfs/a.png", "type": "image", "width": 10, "height": 20}]
+    assert doc.capture_status == "complete"
+    assert doc.content_kinds == ["text", "metadata", "images"]
+    assert calls[0][0] == "https://www.bilibili.com/opus/124?spm=1"
+    assert "opus/detail" in calls[1][0] and "features=html" in calls[1][0] and "id=124" in calls[1][0]
+    assert calls[0][1] is calls[1][1]
+
+
+def test_bilibili_connector_reports_opus_risk_control(monkeypatch):
+    payload = json.dumps({"code": -352, "message": "-352", "data": {}})
+
+    def fake(request, timeout=10, cookie_jar=None):
+        return FakeResponse(payload, request.full_url)
+
+    monkeypatch.setattr("xfetch.connectors.bilibili.urlopen", fake)
+    with pytest.raises(ValueError, match="risk control"):
+        BilibiliConnector().fetch("https://www.bilibili.com/opus/124")
+
+
+def test_bilibili_connector_marks_unknown_opus_blocks_partial(monkeypatch):
+    payload = json.dumps({
+        "code": 0,
+        "data": {"item": {
+            "basic": {"title": "Opus Title"},
+            "modules": [{"module_content": {"paragraphs": [
+                {"para_type": 1, "text": {"nodes": [{"word": {"words": "Kept"}}]}},
+                {"para_type": 9, "text": {"nodes": []}},
+            ]}}],
+        }},
+    })
+    monkeypatch.setattr(
+        "xfetch.connectors.bilibili.urlopen",
+        lambda request, timeout=10, cookie_jar=None: FakeResponse(payload, request.full_url),
+    )
+    doc = BilibiliConnector().fetch("https://www.bilibili.com/opus/124")
+    assert doc.capture_status == "partial"
+    assert "Kept" in doc.text
+    assert "not converted" in doc.metadata["capture_limitation"]

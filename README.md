@@ -124,11 +124,18 @@ Asset download failures are not silently ignored: the affected asset records a `
 | WeChat | article text/images when public HTML is available; verification pages fail explicitly |
 | Xiaohongshu | image notes can be `complete`; video notes are `partial` until video preservation exists; login walls fail explicitly |
 | YouTube | `partial` when public captions can be captured; otherwise `metadata_only` |
-| Bilibili | `partial` when public subtitles can be captured; otherwise `metadata_only` |
+| Feishu / Lark wiki and docx | document text when the page is anonymously readable; images, files, and sheets are not preserved; `partial` when those blocks are present, otherwise `complete` for the text capture |
+| Bilibili | `partial` when public subtitles can be captured, otherwise `metadata_only`; `/opus/<id>` posts capture article text and images from the public opus API (`partial` when a paragraph type is skipped) |
 
 YouTube caption capture is best-effort. Some caption tracks are advertised by YouTube but require additional playback tokens; those remain `metadata_only` and record the transcript capture failure instead of failing the whole save. Video bytes are not preserved, so transcript-backed YouTube bundles remain `partial`.
 
 Bilibili subtitle capture uses the public player subtitle list. Videos with public subtitle tracks are captured as `partial`; subtitles that require login remain `metadata_only` with that limitation recorded. Video bytes are not preserved.
+
+Feishu and Lark (`feishu.cn`, `larksuite.com`, `larkoffice.com`) wiki and docx URLs are read with the anonymous session cookies the redirect sets, then the docx `client_vars` payload. Permission failures raise an error and do not save the login shell.
+
+Bilibili opus URLs (`/opus/<numeric id>`) use the public opus detail API. `/video/` URLs still require a BV id.
+
+Zhihu column pages that return the zse-ck anti-bot challenge fail with an explicit error. Changing the User-Agent does not capture the article, and xfetch does not save the challenge page.
 
 ## Network safety
 

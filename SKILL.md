@@ -84,10 +84,13 @@ After publication, `publication.json` records the content commit revision and pu
 - Xiaohongshu notes when public HTML contains the note state
 - YouTube video URLs: `partial` when public captions are captured, otherwise `metadata_only`
 - Bilibili video URLs: `partial` when public subtitles are captured, otherwise `metadata_only`
+- Bilibili `/opus/<id>` posts: article text and images from the public opus API (`partial` when a paragraph type is skipped)
+- Feishu / Lark wiki and docx URLs when anonymously readable: document text (`partial` when image, file, or sheet blocks are present; otherwise `complete` for text)
+- Zhihu column pages: zse-ck anti-bot challenges are not captured
 
 YouTube caption tracks can be advertised but inaccessible without additional playback tokens; keep those results `metadata_only` and report the recorded capture limitation. Bilibili subtitles that require login likewise remain `metadata_only`.
 
-If WeChat returns a verification page or Xiaohongshu returns a login wall, report the fetch failure rather than saving the interstitial as content.
+If WeChat returns a verification page, Feishu or Lark returns a permission error, or Xiaohongshu returns a login wall, report the fetch failure rather than saving the interstitial as content. A Zhihu zse-ck HTTP 403 is a failed capture: report the error and do not claim the URL was saved.
 
 ## Capture results
 

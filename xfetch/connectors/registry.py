@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from xfetch.connectors.bilibili import BilibiliConnector
+from xfetch.connectors.feishu import FeishuConnector
 from xfetch.connectors.rss import RSSConnector
 from xfetch.connectors.telegram import TelegramConnector
 from xfetch.connectors.wechat import WeChatConnector
@@ -11,7 +12,7 @@ from xfetch.connectors.youtube import YouTubeConnector
 
 
 def connector_registry():
-    return [XConnector(), RSSConnector(), TelegramConnector(), WeChatConnector(), XiaohongshuConnector(), YouTubeConnector(), BilibiliConnector(), WebConnector()]
+    return [XConnector(), RSSConnector(), TelegramConnector(), WeChatConnector(), XiaohongshuConnector(), YouTubeConnector(), BilibiliConnector(), FeishuConnector(), WebConnector()]
 
 
 def pick_connector(url: str):

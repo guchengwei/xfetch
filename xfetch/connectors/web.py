@@ -120,6 +120,21 @@ def _domain_handle(url: str) -> str:
     return urlparse(url).netloc.lower() or "unknown"
 
 
+def _error_body(exc: HTTPError, limit: int = 8192) -> str:
+    try:
+        raw = exc.read(limit)
+    except Exception:
+        return ""
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace")
+    return str(raw or "")
+
+
+def _is_zhihu_host(hostname: str | None) -> bool:
+    host = (hostname or "").lower().rstrip(".")
+    return host == "zhihu.com" or host.endswith(".zhihu.com")
+
+
 class WebConnector(BaseConnector):
     def can_handle(self, url: str) -> bool:
         if not url.lower().startswith(("http://", "https://")):
@@ -133,6 +148,13 @@ class WebConnector(BaseConnector):
             html, fetched_url, content_type = _fetch_url(url)
         except HTTPError as exc:
             parsed = urlparse(url)
+            if exc.code == 403 and _is_zhihu_host(parsed.hostname):
+                body = _error_body(exc)
+                if "zh-zse-ck" in body or "static.zhihu.com/zse-ck" in body:
+                    raise ValueError(
+                        f"Zhihu blocked automated access to {url} (HTTP 403, zse-ck anti-bot challenge). "
+                        "xfetch cannot capture Zhihu articles without a browser session; nothing was saved."
+                    ) from exc
             match = re.fullmatch(r"/(@[A-Za-z0-9_.-]+)/[^/]+-([a-f0-9]{12})/?", parsed.path)
             if exc.code != 403 or parsed.hostname not in {"medium.com", "www.medium.com"} or not match:
                 raise
