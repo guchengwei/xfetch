@@ -185,6 +185,46 @@ def test_cli_sync_writes_into_target_repo(tmp_path):
 
 
 
+def test_cli_publish_uses_one_commit_and_includes_receipt(tmp_path):
+    bundle_dir = _make_bundle(tmp_path / "content-out")
+    target_repo = _init_target_repo(tmp_path)
+    bundle_rel = "content/2026-03/x-123-alice"
+
+    rc = main([
+        "publish",
+        str(bundle_dir),
+        "--target-repo",
+        str(target_repo),
+        "--repo-owner",
+        "guchengwei",
+        "--repo-name",
+        "link-vault",
+    ])
+    assert rc == 0
+
+    log_lines = [line for line in _git("log", "--format=%s", cwd=target_repo).splitlines() if line.strip()]
+    assert log_lines == ["publish: x-123-alice"]
+
+    head = _git("rev-parse", "HEAD", cwd=target_repo)
+    committed_publish = json.loads(_git("show", f"HEAD:{bundle_rel}/publish.json", cwd=target_repo))
+    assert committed_publish["published"] is True
+    assert committed_publish["public_url"] == "https://guchengwei.github.io/link-vault/d/x-123-alice/"
+    assert committed_publish["revision"] is None
+
+    committed_receipt = json.loads(_git("show", f"HEAD:{bundle_rel}/publication.json", cwd=target_repo))
+    assert committed_receipt["published"] is True
+    assert committed_receipt["public_url"] == "https://guchengwei.github.io/link-vault/d/x-123-alice/"
+    assert committed_receipt["content_revision"] is None
+
+    target_publish = json.loads((target_repo / bundle_rel / "publish.json").read_text(encoding="utf-8"))
+    assert target_publish["revision"] == head
+    target_receipt = json.loads((target_repo / bundle_rel / "publication.json").read_text(encoding="utf-8"))
+    assert target_receipt["content_revision"] == head
+
+    source_receipt = json.loads((bundle_dir / "publication.json").read_text(encoding="utf-8"))
+    assert source_receipt["content_revision"] == head
+
+
 def test_cli_publish_writes_public_url_and_revision(tmp_path):
     bundle_dir = _make_bundle(tmp_path / "content-out")
     target_repo = _init_target_repo(tmp_path)
