@@ -107,7 +107,7 @@ class WeChatConnector(BaseConnector):
             summary=None,
             assets=assets,
             metadata={"platform": "wechat", "account": account, "content_type": content_type},
-            lineage={"connector": "wechat", "runtime_version": "0.2.1"},
+            lineage={"connector": "wechat", "runtime_version": "0.2.2"},
             capture_status=capture_status,
             content_kinds=["text", "images"] if assets else ["text"],
         )

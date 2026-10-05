@@ -67,7 +67,7 @@ def _normalize_created_at(value: str | None) -> str | None:
 
 
 def _fetch_feed(url: str) -> tuple[ET.Element, str, str]:
-    request = Request(url, headers={"User-Agent": "xfetch/0.2.1"})
+    request = Request(url, headers={"User-Agent": "xfetch/0.2.2"})
     with urlopen(request, timeout=10) as response:
         body = response.read().decode("utf-8", errors="replace")
         final_url = response.geturl()
@@ -138,7 +138,7 @@ class RSSConnector(BaseConnector):
             summary=None,
             assets=assets,
             metadata={"platform": "rss", "feed_title": feed_title, "content_type": content_type},
-            lineage={"connector": "rss", "runtime_version": "0.2.1"},
+            lineage={"connector": "rss", "runtime_version": "0.2.2"},
             capture_status="complete" if content else ("partial" if body else "metadata_only"),
             content_kinds=(["text", "metadata"] if body else ["metadata"]) + (["images"] if assets else []),
         )

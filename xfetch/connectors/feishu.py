@@ -319,7 +319,7 @@ class FeishuConnector(BaseConnector):
             summary=None,
             assets=[],
             metadata=metadata,
-            lineage={"connector": "feishu", "runtime_version": "0.2.1"},
+            lineage={"connector": "feishu", "runtime_version": "0.2.2"},
             capture_status=capture_status,
             content_kinds=["text", "metadata"],
         )
