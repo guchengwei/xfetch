@@ -74,7 +74,7 @@ class XConnector(BaseConnector):
             summary=None,
             assets=raw.get("assets", []),
             metadata=metadata,
-            lineage={"fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "connector": "x", "backend": backend, "runtime_version": "0.2.1"},
+            lineage={"fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "connector": "x", "backend": backend, "runtime_version": "0.2.2"},
             capture_status=capture_status,
             content_kinds=["text", "images"] if raw.get("assets") else ["text"],
         )

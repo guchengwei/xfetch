@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xfetch"
-version = "0.2.1"
+version = "0.2.2"
 description = "Chat-first link preservation runtime for durable portable bundles"
 readme = "README.md"
 requires-python = ">=3.10"

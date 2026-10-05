@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 - 2026-10-05
 
-- capture anonymously readable Feishu and Lark wiki/docx text
-- capture Bilibili opus article text and images
-- fail Zhihu zse-ck challenges with an explicit error instead of a bare HTTP 403
+- preserve headings, paragraphs, lists, and inline images in captured markdown via the shared `article_html` converter (WeChat, generic web articles, X posts and articles, Xiaohongshu notes)
+- capture anonymously readable Feishu and Lark wiki/docx pages (cookies across redirects; wiki `SERVER_DATA` and docx `client_vars`); skip images, files, and sheets with `partial` captures
+- capture Bilibili `/opus/<id>` article text and images through the public polymer opus API
+- fail Zhihu `zse-ck` HTTP 403 challenges with an explicit error and write no bundle
 
 ## 0.2.1 - 2026-10-03
 
