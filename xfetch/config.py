@@ -8,7 +8,7 @@ class RuntimeConfig:
     content_root: Path
     site_root: Path
     timezone: str = "UTC"
-    runtime_version: str = "0.2.2"
+    runtime_version: str = "0.2.3"
     publish_branch: str = "main"
     site_subdir: str = "site"
 
