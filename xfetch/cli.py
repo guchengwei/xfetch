@@ -80,7 +80,7 @@ def _write_publish_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _set_publish_metadata(path: Path, public_url: str, revision: str, published: bool) -> None:
+def _set_publish_metadata(path: Path, public_url: str, revision: str | None, published: bool) -> None:
     payload = _load_publish_json(path)
     payload["published"] = published
     payload["public_url"] = public_url
@@ -88,7 +88,7 @@ def _set_publish_metadata(path: Path, public_url: str, revision: str, published:
     _write_publish_json(path, payload)
 
 
-def _write_publication_receipt(path: Path, public_url: str, content_revision: str, target: PublishTargetConfig) -> None:
+def _write_publication_receipt(path: Path, public_url: str, content_revision: str | None, target: PublishTargetConfig) -> None:
     payload = {
         "published": True,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -122,28 +122,27 @@ def _publication_paths(target_repo: Path, sync_result) -> tuple[list[str], str]:
 
 
 def _publish_synced_bundle(bundle_dir: Path, target_repo: Path, publish_target: PublishTargetConfig, sync_result, public_url: str) -> tuple[str, str]:
-    content_paths, bundle_path = _publication_paths(target_repo, sync_result)
-    content_revision = commit_repo(
-        target_repo,
-        branch=publish_target.branch,
-        commit_message=f"publish: {bundle_dir.name}",
-        paths=content_paths,
-    )
+    _, bundle_path = _publication_paths(target_repo, sync_result)
+    slug = bundle_dir.name
+    target_bundle = sync_result.bundle_destination_dir
+    target_publish = target_bundle / "publish.json"
+    target_receipt = target_bundle / "publication.json"
 
-    target_publish = sync_result.bundle_destination_dir / "publish.json"
-    _set_publish_metadata(target_publish, public_url, content_revision, published=True)
-    _write_publication_receipt(sync_result.bundle_destination_dir / "publication.json", public_url, content_revision, publish_target)
-    receipt_revision = commit_repo(
+    _set_publish_metadata(target_publish, public_url, None, published=True)
+    _write_publication_receipt(target_receipt, public_url, None, publish_target)
+    revision = commit_repo(
         target_repo,
         branch=publish_target.branch,
-        commit_message=f"receipt: {bundle_dir.name}",
+        commit_message=f"publish: {slug}",
         paths=[bundle_path],
     )
     push_repo(target_repo, branch=publish_target.branch)
 
-    _set_publish_metadata(bundle_dir / "publish.json", public_url, content_revision, published=True)
-    _write_publication_receipt(bundle_dir / "publication.json", public_url, content_revision, publish_target)
-    return content_revision, receipt_revision
+    _set_publish_metadata(target_publish, public_url, revision, published=True)
+    _write_publication_receipt(target_receipt, public_url, revision, publish_target)
+    _set_publish_metadata(bundle_dir / "publish.json", public_url, revision, published=True)
+    _write_publication_receipt(bundle_dir / "publication.json", public_url, revision, publish_target)
+    return revision, revision
 
 
 def _resolve_optional_publish_target(args) -> tuple[Path | None, PublishTargetConfig | None]:

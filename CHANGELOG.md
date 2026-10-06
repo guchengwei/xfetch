@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 - 2026-10-06
+
+- publish target bundles in a single `publish: <slug>` commit that includes final `publish.json` and `publication.json`, with one push to the target repo
+- record the publish commit SHA in local and working-tree metadata after push so git trees do not embed self-referential revisions
+
 ## 0.2.2 - 2026-10-05
 
 - preserve headings, paragraphs, lists, and inline images in captured markdown via the shared `article_html` converter (WeChat, generic web articles, X posts and articles, Xiaohongshu notes)
