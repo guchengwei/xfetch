@@ -192,8 +192,8 @@ JSON output includes capture quality plus publication state:
   "bundle_dir": "...",
   "published": true,
   "public_url": "...",
-  "revision": "<content commit>",
-  "receipt_revision": "<receipt commit>"
+  "revision": "<publish commit>",
+  "receipt_revision": "<publish commit>"
 }
 ```
 
@@ -225,9 +225,9 @@ python -m xfetch publish ./content-out/2026-08/web-example \
   --repo-name repo
 ```
 
-Publication stages only the generated bundle path. Unrelated dirty files are left untouched, and unrelated pre-staged changes cause publication to fail instead of being swept into a content commit.
+Publication stages only the generated bundle path. Unrelated dirty files are left untouched, and unrelated pre-staged changes cause publication to fail instead of being swept into a publish commit.
 
-The publisher creates a content commit, records that immutable content revision in `publish.json`/`publication.json`, creates a receipt commit locally, then pushes both commits in one push. This avoids the self-referential problem of trying to place a commit's own SHA inside itself.
+The publisher writes final `publish.json` and `publication.json` into the target bundle (with `revision` / `content_revision` left null in git), creates one `publish: <slug>` commit, and pushes once. After push, it updates the local source bundle and target working tree with the returned commit SHA without committing again, so the revision is not self-referential inside the published tree. JSON output still includes `receipt_revision` for compatibility; it matches `revision`.
 
 For an existing remote branch, the target checkout must start exactly at `origin/<branch>` before publication. This prevents unrelated local commits from being swept into the publish push.
 
