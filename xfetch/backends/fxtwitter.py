@@ -16,17 +16,50 @@ def build_fxtwitter_url(tweet_url: str) -> str:
     return f"https://api.fxtwitter.com/{path}"
 
 
-def fetch_fxtwitter_json(tweet_url: str, timeout: int = 20) -> dict:
-    req = Request(build_fxtwitter_url(tweet_url), headers={"User-Agent": "Mozilla/5.0"})
+def build_vxtwitter_url(tweet_url: str) -> str:
+    path = urlparse(tweet_url).path.strip("/")
+    return f"https://api.vxtwitter.com/{path}"
+
+
+def _fetch_json(url: str, timeout: int) -> dict:
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     with safe_urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+        payload = json.loads(resp.read().decode())
+    if not isinstance(payload, dict):
+        raise ValueError("status response was not a JSON object")
+    return payload
+
+
+def fetch_fxtwitter_json(tweet_url: str, timeout: int = 20) -> dict:
+    return _fetch_json(build_fxtwitter_url(tweet_url), timeout)
+
+
+def fetch_vxtwitter_json(tweet_url: str, timeout: int = 20) -> dict:
+    return _fetch_json(build_vxtwitter_url(tweet_url), timeout)
 
 
 def fetch_oembed_json(tweet_url: str, timeout: int = 10) -> dict:
     endpoint = "https://publish.twitter.com/oembed?" + urlencode({"url": tweet_url, "omit_script": "true"})
-    req = Request(endpoint, headers={"User-Agent": "Mozilla/5.0"})
-    with safe_urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    return _fetch_json(endpoint, timeout)
+
+
+def status_text_is_thin(text: str) -> bool:
+    """True when a status body is empty or only a short link card."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return True
+    if re.fullmatch(r"https://t\.co/\w+", cleaned):
+        return True
+    if re.fullmatch(r"https://(?:www\.)?(?:x|twitter)\.com/i/article/\d+", cleaned):
+        return True
+    if "https://t.co/" in cleaned and len(cleaned) < 80:
+        return True
+    return False
+
+
+def oembed_text_is_thin(text: str) -> bool:
+    cleaned = (text or "").strip()
+    return status_text_is_thin(cleaned) or cleaned.endswith("…") or cleaned.endswith("...")
 
 
 def parse_oembed_payload(payload: dict, source_url: str) -> dict:
@@ -35,7 +68,7 @@ def parse_oembed_payload(payload: dict, source_url: str) -> dict:
     inner = match.group(1) if match else fragment
     plain = re.sub(r"<br\s*/?>", "\n", inner, flags=re.IGNORECASE)
     text = unescape(re.sub(r"<[^>]+>", "", plain)).strip()
-    if not text or text.endswith("…") or text.endswith("...") or ("https://t.co/" in text and len(text) < 80):
+    if oembed_text_is_thin(text):
         raise ValueError("X oEmbed returned thin or truncated content")
     parser = ArticleHTMLParser(source_url)
     parser.feed(f"<article>{inner}</article>")
@@ -241,11 +274,33 @@ def _extract_article_content(article: dict | None) -> tuple[str, str, list[dict]
     if title:
         _append_deduped(text_parts, seen_text, title)
         _append_deduped(markdown_parts, seen_markdown, title)
-    if preview_text and preview_text != title:
+    content = article.get("content") or {}
+    body_norm = " ".join(
+        " ".join(str(block.get("text") or "").split())
+        for block in (content.get("blocks") or [])
+        if isinstance(block, dict)
+    ).strip()
+    preview_norm = " ".join(preview_text.split())
+    preview_already_in_body = bool(preview_norm) and body_norm.startswith(preview_norm)
+    cover = article.get("cover_media") or {}
+    if isinstance(cover, dict) and not _media_info_is_video(cover):
+        cover_url = _extract_media_url(cover)
+        if cover_url and cover_url not in asset_urls:
+            _append_asset_deduped(
+                assets,
+                asset_urls,
+                {
+                    "url": cover_url,
+                    "type": "image",
+                    "source": "article_inline",
+                    "media_id": str(cover.get("media_id") or "").strip(),
+                },
+            )
+            _append_deduped(markdown_parts, seen_markdown, f"![]({cover_url})")
+    if preview_text and preview_text != title and not preview_already_in_body:
         _append_deduped(text_parts, seen_text, preview_text)
         _append_deduped(markdown_parts, seen_markdown, preview_text)
 
-    content = article.get("content") or {}
     entity_map = _normalize_entity_map(content.get("entityMap"))
     media_map = _article_media_map(article)
     list_index = 0
@@ -323,7 +378,10 @@ def parse_fxtwitter_payload(payload: dict) -> dict:
     article_text, article_markdown, article_assets = _extract_article_content(article)
     tweet_assets, tweet_has_video = _extract_tweet_media(tweet)
     text = (tweet.get("text") or "").strip()
-    if not text or text == raw_text:
+    # Article posts put a t.co or /i/article link in the status text and the body elsewhere.
+    if article_text and (status_text_is_thin(text) or len(article_text) > len(text)):
+        text = article_text
+    elif not text or text == raw_text:
         text = article_text or raw_text or text
     markdown = article_markdown or text
     attached: list[str] = []

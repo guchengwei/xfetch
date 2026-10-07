@@ -108,7 +108,7 @@ class _HTMLDocumentParser(HTMLParser):
 
 
 def _fetch_url(url: str) -> tuple[str, str, str]:
-    request = Request(url, headers={"User-Agent": "xfetch/0.2.3"})
+    request = Request(url, headers={"User-Agent": "xfetch/0.2.4"})
     with urlopen(request, timeout=10) as response:
         body = response.read().decode("utf-8", errors="replace")
         final_url = response.geturl()
@@ -221,7 +221,7 @@ class WebConnector(BaseConnector):
             summary=parser.description,
             assets=assets,
             metadata={"platform": "web", "content_type": content_type, "description": parser.description},
-            lineage={"fetched_at": fetched_at, "connector": "web", "runtime_version": "0.2.3"},
+            lineage={"fetched_at": fetched_at, "connector": "web", "runtime_version": "0.2.4"},
             capture_status="partial",
             content_kinds=["text", "metadata"] + (["images"] if assets else []),
         )
