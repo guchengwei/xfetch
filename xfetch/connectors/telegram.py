@@ -65,7 +65,7 @@ class TelegramConnector(BaseConnector):
             summary=None,
             assets=assets,
             metadata={"platform": "telegram", "channel": channel, "message_id": message_id, "content_type": content_type},
-            lineage={"connector": "telegram", "runtime_version": "0.2.3"},
+            lineage={"connector": "telegram", "runtime_version": "0.2.4"},
             capture_status="partial",
             content_kinds=["text", "thumbnail"] if image else ["text"],
         )

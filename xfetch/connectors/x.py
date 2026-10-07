@@ -5,7 +5,15 @@ import re
 from urllib.parse import urlparse
 
 from xfetch.article_html import visual_capture_status
-from xfetch.backends.fxtwitter import fetch_fxtwitter_json, fetch_oembed_json, parse_fxtwitter_payload, parse_oembed_payload
+from xfetch.backends.fxtwitter import (
+    fetch_fxtwitter_json,
+    fetch_oembed_json,
+    fetch_vxtwitter_json,
+    parse_fxtwitter_payload,
+    parse_oembed_payload,
+    status_text_is_thin,
+)
+from xfetch.backends.x_guest import fetch_guest_status_payload, fetch_x_api_status_payload, x_api_configured
 from xfetch.connectors.base import BaseConnector
 from xfetch.models import NormalizedDocument, derive_title, render_markdown
 
@@ -29,16 +37,28 @@ class XConnector(BaseConnector):
         return is_x_url(url)
 
     def fetch(self, url: str) -> NormalizedDocument:
-        try:
-            raw = parse_fxtwitter_payload(fetch_fxtwitter_json(url))
-            status = "partial" if raw.get("has_unpreserved_video") else "complete"
-            return self._normalize_raw(url, raw, backend="fxtwitter", capture_status=status)
-        except Exception as primary_error:
-            raw = parse_oembed_payload(fetch_oembed_json(url), source_url=url)
-            doc = self._normalize_raw(url, raw, backend="oembed", capture_status="partial")
-            doc.metadata["fallback_from"] = "fxtwitter"
-            doc.metadata["fallback_error"] = type(primary_error).__name__
+        failures: list[tuple[str, Exception]] = []
+        for backend, load in _status_loaders():
+            if backend == "x-api" and not x_api_configured():
+                continue
+            try:
+                raw = load(url)
+            except Exception as exc:
+                failures.append((backend, exc))
+                continue
+            if status_text_is_thin(str(raw.get("text") or "")):
+                failures.append((backend, ValueError("X response was thin or truncated")))
+                continue
+            status = "partial" if raw.get("has_unpreserved_video") or backend == "oembed" else "complete"
+            doc = self._normalize_raw(url, raw, backend=backend, capture_status=status)
+            if failures:
+                doc.metadata["fallback_from"] = failures[0][0]
+                doc.metadata["fallback_error"] = type(failures[0][1]).__name__
             return doc
+        if not failures:
+            raise ValueError("X post could not be captured")
+        detail = "; ".join(f"{name}: {type(exc).__name__}: {exc}" for name, exc in failures)
+        raise ValueError(f"X post could not be captured ({detail})") from failures[-1][1]
 
     def normalize_payload(self, source_url: str, payload: dict) -> NormalizedDocument:
         raw = parse_fxtwitter_payload(payload)
@@ -74,7 +94,7 @@ class XConnector(BaseConnector):
             summary=None,
             assets=raw.get("assets", []),
             metadata=metadata,
-            lineage={"fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "connector": "x", "backend": backend, "runtime_version": "0.2.3"},
+            lineage={"fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "connector": "x", "backend": backend, "runtime_version": "0.2.4"},
             capture_status=capture_status,
             content_kinds=["text", "images"] if raw.get("assets") else ["text"],
         )
@@ -91,3 +111,13 @@ class XConnector(BaseConnector):
             status=doc.capture_status,
         )
         return doc
+
+
+def _status_loaders():
+    return (
+        ("fxtwitter", lambda url: parse_fxtwitter_payload(fetch_fxtwitter_json(url))),
+        ("vxtwitter", lambda url: parse_fxtwitter_payload(fetch_vxtwitter_json(url))),
+        ("x-guest", lambda url: parse_fxtwitter_payload(fetch_guest_status_payload(url))),
+        ("x-api", lambda url: parse_fxtwitter_payload(fetch_x_api_status_payload(url))),
+        ("oembed", lambda url: parse_oembed_payload(fetch_oembed_json(url), source_url=url)),
+    )

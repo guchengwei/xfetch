@@ -117,7 +117,7 @@ Asset download failures are not silently ignored: the affected asset records a `
 
 | Source | Current capture level |
 |---|---|
-| X status | `complete` for preserved text/photos through FxTwitter; posts with unpreserved video and oEmbed fallback are `partial` |
+| X status | `complete` for preserved text/photos, including X Article title, body, and images; unpreserved video and oEmbed fallback are `partial` |
 | Generic web | `partial` main/article-oriented text extraction |
 | RSS / Atom | `complete` when a full content element is present, otherwise `partial` |
 | Public Telegram | `partial` OpenGraph post representation |
@@ -136,6 +136,8 @@ Feishu and Lark (`feishu.cn`, `larksuite.com`, `larkoffice.com`) wiki and docx U
 Bilibili opus URLs (`/opus/<numeric id>`) use the public opus detail API. `/video/` URLs still require a BV id.
 
 Zhihu column pages that return the zse-ck anti-bot challenge fail with an explicit error. Changing the User-Agent does not capture the article, and xfetch does not save the challenge page.
+
+X posts are read from FxTwitter first, then VxTwitter. Both already include X Article blocks and images when they respond. If they are blocked or only return the short `t.co` card, xfetch asks X's public guest post endpoint for the same status. That response includes the Article title, body, cover, and inline images, and it does not need a user token. oEmbed is last and is rejected when the HTML is only that short card, so a thin Article link is not saved as the post. Posts with video are `partial` because the video file is not preserved. Set `XFETCH_X_BEARER_TOKEN` to an official X API bearer only when the guest lookup fails; FxTwitter, VxTwitter, and the guest lookup stay preferred while they work.
 
 ## Network safety
 
@@ -180,6 +182,7 @@ Optional environment overrides:
 - `XFETCH_BRANCH`
 - `XFETCH_CONTENT_SUBDIR`
 - `XFETCH_CONTENT_ROOT`
+- `XFETCH_X_BEARER_TOKEN` — optional official X API bearer, used only after FxTwitter, VxTwitter, and the public guest post lookup fail
 
 JSON output includes capture quality plus publication state:
 

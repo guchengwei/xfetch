@@ -76,7 +76,7 @@ After publication, `publication.json` records the content commit revision and pu
 
 ## Supported source families
 
-- X status URLs
+- X status URLs, including X Articles: title, body, and images are saved from FxTwitter or VxTwitter when those respond; if they are blocked, xfetch uses X's public guest post lookup. A short oEmbed t.co card is not saved as the article. Optional `XFETCH_X_BEARER_TOKEN` is only for when that guest lookup fails.
 - generic public web pages
 - RSS/Atom feeds
 - public Telegram URLs

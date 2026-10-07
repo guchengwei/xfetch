@@ -174,7 +174,7 @@ class YouTubeConnector(BaseConnector):
             summary=None,
             assets=assets,
             metadata=metadata,
-            lineage={"connector": "youtube", "runtime_version": "0.2.3"},
+            lineage={"connector": "youtube", "runtime_version": "0.2.4"},
             capture_status=capture_status,
             content_kinds=content_kinds,
         )

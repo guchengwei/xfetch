@@ -1,0 +1,92 @@
+{
+  "data": {
+    "tweetResult": {
+      "result": {
+        "__typename": "Tweet",
+        "rest_id": "2105181393638531536",
+        "views": {"count": "119082", "state": "EnabledWithCount"},
+        "legacy": {
+          "id_str": "2105181393638531536",
+          "full_text": "https://t.co/LAqhpQoY1c",
+          "created_at": "Wed Sep 30 06:22:11 +0000 2026",
+          "lang": "zxx",
+          "favorite_count": 825,
+          "retweet_count": 70,
+          "reply_count": 34,
+          "entities": {
+            "urls": [
+              {
+                "url": "https://t.co/LAqhpQoY1c",
+                "expanded_url": "https://x.com/i/article/2105179653925150720"
+              }
+            ]
+          }
+        },
+        "core": {
+          "user_results": {
+            "result": {
+              "legacy": {"screen_name": "dotey", "name": "宝玉"}
+            }
+          }
+        },
+        "article": {
+          "article_results": {
+            "result": {
+              "rest_id": "2105179653925150720",
+              "title": "Claude Opus 5.5 是怎么做出视频的",
+              "preview_text": "先说结论：视频是程序画出来的",
+              "plain_text": "先说结论：视频是程序画出来的\n\n第二段把生成步骤写完整，不是短链接。",
+              "content_state": {
+                "blocks": [
+                  {"type": "unstyled", "text": "先说结论：视频是程序画出来的", "entityRanges": []},
+                  {"type": "header-two", "text": "过程", "entityRanges": []},
+                  {
+                    "type": "atomic",
+                    "text": " ",
+                    "entityRanges": [{"key": 0, "offset": 0, "length": 1}]
+                  },
+                  {"type": "unstyled", "text": "第二段把生成步骤写完整，不是短链接。", "entityRanges": []}
+                ],
+                "entityMap": [
+                  {
+                    "key": "0",
+                    "value": {
+                      "type": "MEDIA",
+                      "mutability": "Immutable",
+                      "data": {"mediaItems": [{"mediaId": "999"}]}
+                    }
+                  }
+                ]
+              },
+              "cover_media": {
+                "media_id": "111",
+                "media_info": {
+                  "__typename": "ApiImage",
+                  "original_img_url": "https://pbs.twimg.com/media/cover.jpg"
+                }
+              },
+              "media_entities": [
+                {
+                  "media_id": "999",
+                  "media_info": {
+                    "__typename": "ApiImage",
+                    "original_img_url": "https://pbs.twimg.com/media/inline.jpg"
+                  }
+                },
+                {
+                  "media_id": "222",
+                  "media_info": {
+                    "__typename": "ApiVideo",
+                    "preview_image": {
+                      "original_img_url": "https://pbs.twimg.com/media/thumb.jpg"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

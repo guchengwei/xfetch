@@ -1,4 +1,6 @@
-from xfetch.backends.fxtwitter import parse_fxtwitter_payload
+import pytest
+
+from xfetch.backends.fxtwitter import parse_fxtwitter_payload, parse_oembed_payload
 
 
 def test_parse_fxtwitter_payload_falls_back_to_raw_text_when_text_empty():
@@ -15,6 +17,27 @@ def test_parse_fxtwitter_payload_falls_back_to_raw_text_when_text_empty():
     }
     result = parse_fxtwitter_payload(payload)
     assert result["text"] == "hello from raw text"
+
+
+def test_parse_fxtwitter_payload_replaces_article_url_text_with_article_body():
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "https://x.com/i/article/123",
+            "raw_text": {"text": "https://t.co/abc"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "article": {
+                "title": "Article title",
+                "content": {"blocks": [{"type": "unstyled", "text": "The article body is the thing worth saving."}]},
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert result["text"].startswith("Article title")
+    assert "The article body is the thing worth saving." in result["text"]
+    assert "https://t.co/abc" not in result["text"]
+    assert "https://x.com/i/article/123" not in result["text"]
 
 
 def test_parse_fxtwitter_payload_uses_article_content_when_post_is_article():
@@ -117,6 +140,49 @@ def test_parse_fxtwitter_payload_preserves_inline_article_images_and_assets():
     assert result["assets"] == [{"url": image_url, "type": "image", "source": "article_inline", "media_id": "999"}]
 
 
+def test_article_preview_that_prefixes_the_body_is_not_repeated():
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "",
+            "raw_text": {"text": "https://t.co/abc"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "article": {
+                "title": "Article title",
+                "preview_text": "Paragraph one is the",
+                "content": {"blocks": [{"type": "unstyled", "text": "Paragraph one is the full opening."}]},
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert result["text"].count("Paragraph one is the") == 1
+    assert "full opening." in result["text"]
+
+
+def test_parse_fxtwitter_payload_includes_article_cover_image():
+    cover = "https://pbs.twimg.com/media/cover.jpg"
+    payload = {
+        "tweet": {
+            "id": "123",
+            "url": "https://x.com/alice/status/123",
+            "text": "",
+            "raw_text": {"text": "https://t.co/abc"},
+            "author": {"screen_name": "alice", "name": "Alice"},
+            "article": {
+                "title": "Article title",
+                "cover_media": {"media_id": "111", "media_info": {"__typename": "ApiImage", "original_img_url": cover}},
+                "content": {"blocks": [{"type": "unstyled", "text": "Body paragraph long enough to keep."}]},
+            },
+        }
+    }
+    result = parse_fxtwitter_payload(payload)
+    assert f"![]({cover})" in result["markdown"]
+    assert result["markdown"].index("Article title") < result["markdown"].index(cover)
+    assert result["assets"][0]["url"] == cover
+    assert result["assets"][0]["source"] == "article_inline"
+
+
 def test_parse_fxtwitter_payload_preserves_article_heading_list_and_code_structure():
     payload = {
         "tweet": {
@@ -175,9 +241,12 @@ def test_parse_fxtwitter_payload_places_tweet_photos_after_text():
     assert f"![]({second})" in result["markdown"]
 
 
-def test_oembed_keeps_line_breaks_and_links():
-    from xfetch.backends.fxtwitter import parse_oembed_payload
+def test_oembed_rejects_truncated_ellipsis():
+    with pytest.raises(ValueError, match="thin or truncated"):
+        parse_oembed_payload({"html": "<p>Hello...</p>"}, "https://x.com/alice/status/123")
 
+
+def test_oembed_keeps_line_breaks_and_links():
     payload = {
         "author_name": "Alice",
         "html": '<blockquote><p>First line<br>Second line <a href="https://example.com/a">docs</a> and more words.</p></blockquote>',

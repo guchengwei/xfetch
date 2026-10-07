@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 - 2026-10-07
+
+- capture X Article title, body, and images when FxTwitter and VxTwitter are blocked and oEmbed is only a short t.co card, using X's public guest post lookup (no user token)
+- try FxTwitter, then VxTwitter, before that guest lookup; optional `XFETCH_X_BEARER_TOKEN` calls the official posts API only if those fail
+- keep an article cover image in the captured markdown, and skip a preview card that only repeats the opening of the body
+
 ## 0.2.3 - 2026-10-06
 
 - publish target bundles in a single `publish: <slug>` commit that includes final `publish.json` and `publication.json`, with one push to the target repo
